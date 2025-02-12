@@ -10,7 +10,6 @@ import { serializeTag } from "../../entities/tag";
 import { type Variables, scopeRequired, tokenRequired } from "../../oauth";
 import {
   accounts as accountsTable,
-  blocks,
   bookmarks,
   likes,
   mutes,
@@ -260,63 +259,5 @@ app.get(
   },
 );
 
-app.get(
-  "/blocks",
-  tokenRequired,
-  scopeRequired(["read:blocks"]),
-  zValidator(
-    "query",
-    z.object({
-      until: z.string().datetime().optional(),
-      limit: z
-        .string()
-        .default("40")
-        .transform((v) => {
-          const parsed = Number.parseInt(v);
-          return Math.min(parsed, 80);
-        }),
-    }),
-  ),
-  async (c) => {
-    const owner = c.get("token").accountOwner;
-    if (owner == null) {
-      return c.json(
-        { error: "This method requires an authenticated user" },
-        422,
-      );
-    }
-
-    const query = c.req.valid("query");
-    const blockList = await db.query.blocks.findMany({
-      where: and(
-        eq(blocks.accountId, owner.id),
-        query.until == null ? undefined : lte(blocks.created, query.until),
-      ),
-      orderBy: desc(blocks.created),
-      limit: query.limit + 1,
-      with: {
-        blockedAccount: { with: { owner: true, successor: true } },
-      },
-    });
-
-    let next: URL | null = null;
-    if (blockList.length > query.limit) {
-      next = new URL(c.req.url);
-      next.searchParams.set(
-        "until",
-        Temporal.Instant.from(blockList[query.limit].created).toString(),
-      );
-    }
-
-    return c.json(
-      blockList
-        .slice(0, query.limit)
-        .map((b) => serializeAccount(b.blockedAccount, c.req.url)),
-      {
-        headers: next == null ? {} : { Link: `<${next.href}>; rel="next"` },
-      },
-    );
-  },
-);
 
 export default app;

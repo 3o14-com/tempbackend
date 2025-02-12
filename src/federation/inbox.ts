@@ -3,7 +3,6 @@ import {
   type Add,
   Announce,
   Article,
-  Block,
   ChatMessage,
   type Create,
   type Delete,
@@ -29,9 +28,7 @@ import { db } from "../db";
 import {
   type NewLike,
   type NewPinnedPost,
-  accountOwners,
   accounts,
-  blocks,
   follows,
   likes,
   pinnedPosts,
@@ -41,8 +38,6 @@ import {
 import { isUuid } from "../uuid";
 import {
   persistAccount,
-  removeFollower,
-  unfollowAccount,
   updateAccountStats,
 } from "./account";
 import {
@@ -101,15 +96,6 @@ export async function onFollowed(
   const follower = await persistAccount(db, actor, ctx.origin, ctx);
   if (follower == null) return;
   let approves = !following.protected;
-  if (approves) {
-    const block = await db.query.blocks.findFirst({
-      where: and(
-        eq(blocks.accountId, following.id),
-        eq(blocks.blockedAccountId, follower.id),
-      ),
-    });
-    approves = block == null;
-  }
   await db
     .insert(follows)
     .values({
@@ -258,76 +244,6 @@ export async function onFollowRejected(
   }
 }
 
-export async function onBlocked(
-  ctx: InboxContext<void>,
-  block: Block,
-): Promise<void> {
-  const blocker = await block.getActor();
-  if (blocker == null) return;
-  const object = ctx.parseUri(block.objectId);
-  if (block.objectId == null || object?.type !== "actor") return;
-  const blocked = await db.query.accountOwners.findFirst({
-    with: { account: true },
-    where: eq(accountOwners.handle, object.identifier),
-  });
-  if (blocked == null) return;
-  const blockerAccount = await persistAccount(db, blocker, ctx.origin, ctx);
-  if (blockerAccount == null) return;
-  const result = await db
-    .insert(blocks)
-    .values({
-      accountId: blockerAccount.id,
-      blockedAccountId: blocked.id,
-    })
-    .onConflictDoNothing()
-    .returning();
-  if (result.length < 1) return;
-  await unfollowAccount(
-    db,
-    ctx,
-    { ...blocked.account, owner: blocked },
-    blockerAccount,
-  );
-  await removeFollower(
-    db,
-    ctx,
-    { ...blocked.account, owner: blocked },
-    blockerAccount,
-  );
-}
-
-export async function onUnblocked(
-  ctx: InboxContext<void>,
-  undo: Undo,
-): Promise<void> {
-  const object = await undo.getObject();
-  if (
-    !(object instanceof Block) ||
-    undo.actorId?.href !== object.actorId?.href
-  ) {
-    return;
-  }
-  const actor = await undo.getActor();
-  if (actor == null) return;
-  const blocker = await persistAccount(db, actor, ctx.origin, ctx);
-  if (blocker == null) return;
-  const target = ctx.parseUri(object.objectId);
-  if (target?.type !== "actor") return;
-  await db
-    .delete(blocks)
-    .where(
-      and(
-        eq(blocks.accountId, blocker.id),
-        eq(
-          blocks.blockedAccountId,
-          db
-            .select({ accountId: accountOwners.id })
-            .from(accountOwners)
-            .where(eq(accountOwners.handle, target.identifier)),
-        ),
-      ),
-    );
-}
 
 export async function onPostCreated(
   ctx: InboxContext<void>,

@@ -118,8 +118,6 @@ export const accountRelations = relations(accounts, ({ one, many }) => ({
   pinnedPosts: many(pinnedPosts),
   mutes: many(mutes, { relationName: "muter" }),
   mutedBy: many(mutes, { relationName: "muted" }),
-  blocks: many(blocks, { relationName: "blocker" }),
-  blockedBy: many(blocks, { relationName: "blocked" }),
   instance: one(instances),
 }));
 
@@ -236,7 +234,6 @@ export const followRelations = relations(follows, ({ one }) => ({
 export const scopeEnum = pgEnum("scope", [
   "read",
   "read:accounts",
-  "read:blocks",
   "read:bookmarks",
   "read:favourites",
   "read:filters",
@@ -248,7 +245,6 @@ export const scopeEnum = pgEnum("scope", [
   "read:statuses",
   "write",
   "write:accounts",
-  "write:blocks",
   "write:bookmarks",
   "write:conversations",
   "write:favourites",
@@ -811,43 +807,6 @@ export const muteRelations = relations(mutes, ({ one }) => ({
   }),
 }));
 
-export const blocks = pgTable(
-  "blocks",
-  {
-    accountId: uuid("account_id")
-      .$type<Uuid>()
-      .notNull()
-      .references(() => accounts.id, { onDelete: "cascade" }),
-    blockedAccountId: uuid("blocked_account_id")
-      .$type<Uuid>()
-      .notNull()
-      .references(() => accounts.id, { onDelete: "cascade" }),
-    created: timestamp("created", { withTimezone: true, mode: "string" })
-      .notNull()
-      .default(currentTimestamp),
-  },
-  (table) => [
-    primaryKey({ columns: [table.accountId, table.blockedAccountId] }),
-    index().on(table.accountId),
-    index().on(table.blockedAccountId),
-  ],
-);
-
-export type Block = typeof blocks.$inferSelect;
-export type NewBlock = typeof blocks.$inferInsert;
-
-export const blockRelations = relations(blocks, ({ one }) => ({
-  account: one(accounts, {
-    fields: [blocks.accountId],
-    references: [accounts.id],
-    relationName: "blocker",
-  }),
-  blockedAccount: one(accounts, {
-    fields: [blocks.blockedAccountId],
-    references: [accounts.id],
-    relationName: "blocked",
-  }),
-}));
 
 export const customEmojis = pgTable("custom_emojis", {
   shortcode: text("shortcode").primaryKey(),

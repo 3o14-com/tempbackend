@@ -49,7 +49,6 @@ import {
   type NewLike,
   type NewPinnedPost,
   type NewPost,
-  blocks,
   bookmarks,
   customEmojis,
   likes,
@@ -457,20 +456,6 @@ app.get(
                 ),
               ),
           ),
-          notInArray(
-            posts.accountId,
-            db
-              .select({ accountId: blocks.blockedAccountId })
-              .from(blocks)
-              .where(eq(blocks.accountId, owner.id)),
-          ),
-          notInArray(
-            posts.accountId,
-            db
-              .select({ accountId: blocks.accountId })
-              .from(blocks)
-              .where(eq(blocks.blockedAccountId, owner.id)),
-          ),
         ),
         with: getPostRelations(owner.id),
       });
@@ -502,20 +487,6 @@ app.get(
                   ),
                 ),
               ),
-          ),
-          notInArray(
-            posts.accountId,
-            db
-              .select({ accountId: blocks.blockedAccountId })
-              .from(blocks)
-              .where(eq(blocks.accountId, owner.id)),
-          ),
-          notInArray(
-            posts.accountId,
-            db
-              .select({ accountId: blocks.accountId })
-              .from(blocks)
-              .where(eq(blocks.blockedAccountId, owner.id)),
           ),
         ),
         with: getPostRelations(owner.id),

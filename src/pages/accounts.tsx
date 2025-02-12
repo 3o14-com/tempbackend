@@ -29,7 +29,6 @@ import {
 import db from "../db.ts";
 import federation from "../federation";
 import {
-  blockAccount,
   followAccount,
   persistAccount,
 } from "../federation/account.ts";
@@ -42,7 +41,6 @@ import {
   type PostVisibility,
   accountOwners,
   accounts as accountsTable,
-  blocks,
   bookmarks,
   follows,
   instances,
@@ -400,10 +398,6 @@ accounts.get("/:id/migrate", async (c) => {
     .select({ mutesCount: count() })
     .from(mutes)
     .where(eq(mutes.accountId, accountOwner.id));
-  const [{ blocksCount }] = await db
-    .select({ blocksCount: count() })
-    .from(blocks)
-    .where(eq(blocks.accountId, accountOwner.id));
   const [{ bookmarksCount }] = await db
     .select({ bookmarksCount: count() })
     .from(bookmarks)
@@ -554,13 +548,6 @@ accounts.get("/:id/migrate", async (c) => {
               </td>
             </tr>
             <tr>
-              <td>You block</td>
-              <td>{blocksCount.toLocaleString("en-US")}</td>
-              <td>
-                <a href="migrate/blocked_accounts.csv">CSV</a>
-              </td>
-            </tr>
-            <tr>
               <td>Bookmarks</td>
               <td>{bookmarksCount.toLocaleString("en-US")}</td>
               <td>
@@ -604,7 +591,6 @@ accounts.get("/:id/migrate", async (c) => {
                 <option value="following_accounts">Follows</option>
                 <option value="lists">Lists</option>
                 <option value="muted_accounts">Muted accounts</option>
-                <option value="blocked_accounts">Blocked accounts</option>
                 <option value="bookmarks">Bookmarks</option>
               </select>
               <small>The category of the data you want to import.</small>
@@ -826,35 +812,6 @@ accounts.get("/:id/migrate/muted_accounts.csv", async (c) => {
   });
 });
 
-accounts.get("/:id/migrate/blocked_accounts.csv", async (c) => {
-  const accountId = c.req.param("id");
-  if (!isUuid(accountId)) return c.notFound();
-  const accountOwner = await db.query.accountOwners.findFirst({
-    where: eq(accountOwners.id, accountId),
-    with: { account: true },
-  });
-  if (accountOwner == null) return c.notFound();
-  const csv = createObjectCsvStringifier({
-    header: [{ id: "handle", title: "handle" }],
-  });
-  c.header("Content-Type", "text/csv");
-  c.header(
-    "Content-Disposition",
-    'attachment; filename="blocked_accounts.csv"',
-  );
-  return streamText(c, async (stream) => {
-    const blockedAccounts = await db.query.blocks.findMany({
-      with: { blockedAccount: true },
-      where: eq(mutes.accountId, accountOwner.id),
-    });
-    for (const blocked of blockedAccounts) {
-      const record = {
-        handle: blocked.blockedAccount.handle.replace(/^@/, ""),
-      };
-      await stream.write(csv.stringifyRecords([record]));
-    }
-  });
-});
 
 accounts.get("/:id/migrate/bookmarks.csv", async (c) => {
   const accountId = c.req.param("id");
@@ -1119,24 +1076,6 @@ accounts.post("/:id/migrate/import", async (c) => {
       }
     });
     message = `Imported ${imported} muted accounts out of ${csv.length} entries.`;
-  } else if (category === "blocked_accounts") {
-    const accounts = csv
-      .map((row) => row[0].trim())
-      .filter((addr) => addr != null);
-    const { results } = await PromisePool.for(accounts).process((handle) =>
-      fedCtx.lookupObject(handle, { documentLoader }),
-    );
-    let blocked = 0;
-    for (const actor of results) {
-      if (!isActor(actor)) continue;
-      await db.transaction(async (tx) => {
-        const target = await persistAccount(tx, actor, c.req.url, fedCtx);
-        if (target == null) return;
-        await blockAccount(tx, fedCtx, accountOwner, target);
-        blocked++;
-      });
-    }
-    message = `Blocked ${blocked} accounts out of ${csv.length} entries.`;
   } else if (category === "bookmarks") {
     const iris = csv.map((row) => row[0].trim()).filter((iri) => iri != null);
     const { results } = await PromisePool.for(iris).process(async (iri) => {

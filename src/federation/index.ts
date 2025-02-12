@@ -3,7 +3,6 @@ import {
   Activity,
   Add,
   Announce,
-  Block,
   Create,
   Delete,
   EmojiReact,
@@ -25,7 +24,6 @@ import {
   onAccountDeleted,
   onAccountMoved,
   onAccountUpdated,
-  onBlocked,
   onEmojiReactionAdded,
   onEmojiReactionRemoved,
   onFollowAccepted,
@@ -39,7 +37,6 @@ import {
   onPostUnpinned,
   onPostUnshared,
   onPostUpdated,
-  onUnblocked,
   onUnfollowed,
   onUnliked,
 } from "./inbox";
@@ -98,7 +95,6 @@ federation
   })
   .on(Add, onPostPinned)
   .on(Remove, onPostUnpinned)
-  .on(Block, onBlocked)
   .on(Move, onAccountMoved)
   .on(Undo, async (ctx, undo) => {
     const object = await undo.getObject();
@@ -110,8 +106,6 @@ federation
     }
     if (object instanceof Follow) {
       await onUnfollowed(ctx, undo);
-    } else if (object instanceof Block) {
-      await onUnblocked(ctx, undo);
     } else if (object instanceof Like) {
       await onUnliked(ctx, undo);
     } else if (object instanceof EmojiReact) {

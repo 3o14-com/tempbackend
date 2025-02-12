@@ -89,8 +89,6 @@ export function scopeRequired(scopes: Scope[]) {
           token.scopes.includes(s) ||
           token.scopes.includes(s.replace(/:[^:]+$/, "")) ||
           ([
-            "read:blocks",
-            "write:blocks",
             "read:follows",
             "write:follows",
             "read:mutes",

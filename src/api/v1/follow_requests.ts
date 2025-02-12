@@ -10,7 +10,7 @@ import {
 import { federation } from "../../federation";
 import { updateAccountStats } from "../../federation/account";
 import { type Variables, scopeRequired, tokenRequired } from "../../oauth";
-import { accounts, blocks, follows, mutes } from "../../schema";
+import { accounts, follows, mutes } from "../../schema";
 import { isUuid } from "../../uuid";
 
 const app = new Hono<{ Variables: Variables }>();
@@ -29,9 +29,9 @@ app.get("/", tokenRequired, scopeRequired(["read:follows"]), async (c) => {
       f.follower.owner == null
         ? serializeAccount(f.follower, c.req.url)
         : serializeAccountOwner(
-            { ...f.follower.owner, account: f.follower },
-            c.req.url,
-          ),
+          { ...f.follower.owner, account: f.follower },
+          c.req.url,
+        ),
     ),
   );
 });
@@ -96,12 +96,6 @@ app.post(
         },
         mutedBy: {
           where: eq(mutes.accountId, owner.id),
-        },
-        blocks: {
-          where: eq(blocks.blockedAccountId, owner.id),
-        },
-        blockedBy: {
-          where: eq(blocks.accountId, owner.id),
         },
       },
     });
@@ -168,12 +162,6 @@ app.post(
         },
         mutedBy: {
           where: eq(mutes.accountId, owner.id),
-        },
-        blocks: {
-          where: eq(blocks.blockedAccountId, owner.id),
-        },
-        blockedBy: {
-          where: eq(blocks.accountId, owner.id),
         },
       },
     });

@@ -1,7 +1,6 @@
 import {
   type Actor,
   Announce,
-  Block,
   type Context,
   Create,
   type DocumentLoader,
@@ -89,11 +88,11 @@ export async function persistAccount(
     successor == null
       ? null
       : ((
-          await persistAccount(db, successor, baseUrl, {
-            ...options,
-            skipUpdate: true,
-          })
-        )?.id ?? null);
+        await persistAccount(db, successor, baseUrl, {
+          ...options,
+          skipUpdate: true,
+        })
+      )?.id ?? null);
   const fieldHtmls: Record<string, string> = {};
   for await (const attachment of actor.getAttachments(opts)) {
     if (
@@ -124,7 +123,7 @@ export async function persistAccount(
     software: nodeInfo?.software.name ?? null,
     softwareVersion:
       nodeInfo?.software == null ||
-      formatSemVer(nodeInfo.software.version) === "0.0.0"
+        formatSemVer(nodeInfo.software.version) === "0.0.0"
         ? null
         : formatSemVer(nodeInfo.software.version),
   };
@@ -295,9 +294,9 @@ export async function updateAccountStats(
     "id" in account
       ? account.id
       : db
-          .select({ id: schema.accounts.id })
-          .from(schema.accounts)
-          .where(eq(schema.accounts.iri, account.iri));
+        .select({ id: schema.accounts.id })
+        .from(schema.accounts)
+        .where(eq(schema.accounts.iri, account.iri));
   const followingCount = db
     .select({ cnt: count() })
     .from(schema.follows)
@@ -477,8 +476,8 @@ export async function removeFollower(
         follower.sharedInboxUrl == null
           ? null
           : {
-              sharedInbox: new URL(follower.sharedInboxUrl),
-            },
+            sharedInbox: new URL(follower.sharedInboxUrl),
+          },
     },
     new Reject({
       id: new URL(`#reject/${crypto.randomUUID()}`, following.iri),
@@ -493,50 +492,3 @@ export async function removeFollower(
   );
   return result[0];
 }
-
-export async function blockAccount(
-  db: PgDatabase<
-    PostgresJsQueryResultHKT,
-    typeof schema,
-    ExtractTablesWithRelations<typeof schema>
-  >,
-  ctx: Context<unknown>,
-  blocker: schema.AccountOwner & { account: schema.Account },
-  blockee: schema.Account & { owner: schema.AccountOwner | null },
-): Promise<schema.Block | null> {
-  const result = await db
-    .insert(schema.blocks)
-    .values({
-      accountId: blocker.id,
-      blockedAccountId: blockee.id,
-    })
-    .returning();
-  if (result.length < 1) return null;
-  if (blockee.owner == null) {
-    await unfollowAccount(
-      db,
-      ctx,
-      { ...blocker.account, owner: blocker },
-      blockee,
-    );
-    await removeFollower(
-      db,
-      ctx,
-      { ...blocker.account, owner: blocker },
-      blockee,
-    );
-    await ctx.sendActivity(
-      { username: blocker.handle },
-      { id: new URL(blockee.iri), inboxId: new URL(blockee.inboxUrl) },
-      new Block({
-        id: new URL(`#block/${blockee.id}`, blocker.account.iri),
-        actor: new URL(blocker.account.iri),
-        object: new URL(blockee.iri),
-      }),
-      { excludeBaseUris: [new URL(ctx.origin)] },
-    );
-  }
-  return result[0];
-}
-
-// TODO: define unblockAccount()

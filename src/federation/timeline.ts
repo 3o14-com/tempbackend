@@ -13,7 +13,6 @@ import type { PostgresJsQueryResultHKT } from "drizzle-orm/postgres-js";
 import type {
   Account,
   AccountOwner,
-  Block,
   Follow,
   List,
   ListMember,
@@ -34,12 +33,9 @@ const logger = getLogger(["3o14", "federation", "timeline"]);
 
 export function isPostVisibleToAccount(
   post: Post & { mentions: Mention[] },
-  account: Account & { following: Follow[]; blockedBy: Block[] },
+  account: Account & { following: Follow[]; },
 ): boolean {
   if (post.accountId === account.id) return true;
-  for (const block of account.blockedBy) {
-    if (block.accountId === post.accountId) return false;
-  }
   if (post.visibility === "public" || post.visibility === "unlisted") {
     return true;
   }
@@ -63,8 +59,6 @@ export function shouldExcludePostFromTimeline(
   owner: AccountOwner & {
     account: Account & {
       following: Follow[];
-      blocks: Block[];
-      blockedBy: Block[];
       mutes: Mute[];
     };
   },
@@ -75,14 +69,6 @@ export function shouldExcludePostFromTimeline(
       !isPostVisibleToAccount(post.sharing, owner.account))
   ) {
     return true;
-  }
-  for (const block of owner.account.blocks) {
-    if (
-      block.accountId === post.accountId ||
-      block.accountId === post.sharing?.accountId
-    ) {
-      return true;
-    }
   }
   for (const mute of owner.account.mutes) {
     if (mute.duration != null) {
@@ -112,8 +98,6 @@ export function shouldIncludePostInTimeline(
   owner: AccountOwner & {
     account: Account & {
       following: Follow[];
-      blocks: Block[];
-      blockedBy: Block[];
       mutes: Mute[];
     };
   },
@@ -135,9 +119,6 @@ export function shouldIncludePostInTimeline(
         (owner.account.following.some(
           (f) => f.followingId === replyTarget.accountId,
         ) &&
-          !owner.account.blocks.some(
-            (b) => b.accountId === replyTarget.accountId,
-          ) &&
           !owner.account.mutes.some(
             (m) => m.mutedAccountId === replyTarget.accountId,
           ))
@@ -168,8 +149,6 @@ export function shouldIncludePostInList(
     accountOwner: AccountOwner & {
       account: Account & {
         following: Follow[];
-        blocks: Block[];
-        blockedBy: Block[];
         mutes: Mute[];
       };
     };
@@ -210,8 +189,6 @@ export async function appendPostToTimelines(
       account: {
         with: {
           following: true,
-          blocks: true,
-          blockedBy: true,
           mutes: true,
         },
       },
@@ -224,8 +201,6 @@ export async function appendPostToTimelines(
           account: {
             with: {
               following: true,
-              blocks: true,
-              blockedBy: true,
               mutes: true,
             },
           },
@@ -319,8 +294,6 @@ export async function rebuildTimelines(
       account: {
         with: {
           following: true,
-          blocks: true,
-          blockedBy: true,
           mutes: true,
         },
       },
@@ -333,8 +306,6 @@ export async function rebuildTimelines(
           account: {
             with: {
               following: true,
-              blocks: true,
-              blockedBy: true,
               mutes: true,
             },
           },
