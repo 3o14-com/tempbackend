@@ -1,0 +1,108 @@
+name: build
+
+on:
+  push:
+    branches:
+    - main
+    - stable
+    - "*.*-maintenance"
+    tags: "*.*.*"
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: pnpm/action-setup@v4
+      with:
+        version: 9.15.1+sha512.1acb565e6193efbebda772702950469150cf12bcc764262e7587e71d19dc98a423dff9536e57ea44c49bdf790ff694e83c27be5faa23d67e0c033b583be4bfcf
+        run_install: false
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 23
+        cache: pnpm
+    - run: pnpm install
+    - run: pnpm run check
+    - if: github.ref_type == 'tag'
+      run: |
+        set -ex
+        [[ "$(jq -r .version package.json)" = "$GITHUB_REF_NAME" ]]
+        ! grep -i "to be released" CHANGES.md
+
+  build-image:
+    if: github.event_name == 'push'
+    needs: [check]
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: docker/setup-qemu-action@v3
+    - uses: docker/setup-buildx-action@v3
+    - uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ github.token }}
+    - uses: sergeysova/jq-action@v2
+      id: version
+      with:
+        cmd: 'jq -r .version package.json'
+    - if: github.ref_type == 'tag'
+      run: '[[ "$VERSION" = "$GITHUB_REF_NAME" ]]'
+      env:
+        VERSION: ${{ steps.version.outputs.value }}
+    - if: github.ref_type != 'tag'
+      uses: docker/build-push-action@v5
+      with:
+        push: true
+        platforms: linux/amd64, linux/arm64
+        build-args:
+          VERSION=${{ steps.version.outputs.value }}-dev.${{ github.run_number }}
+        tags: |
+          ghcr.io/${{ github.repository }}:git-${{ github.sha }}
+          ghcr.io/${{ github.repository }}:${{ steps.version.outputs.value }}-dev.${{ github.run_number }}
+          ghcr.io/${{ github.repository }}:pii
+        labels:
+          org.opencontainers.image.revision=${{ github.sha }}
+        annotations: |
+          org.opencontainers.image.title=3o14
+          org.opencontainers.image.description=Federated Microblogging platform
+          org.opencontainers.image.url=https://github.com/3o14-com/backend
+          org.opencontainers.image.source=https://github.com/3o14-com/backend
+          org.opencontainers.image.revision=${{ github.sha }}
+          org.opencontainers.image.licenses=AGPL-3.0-only
+          org.opencontainers.image.version=${{ steps.version.outputs.value }}-dev.${{ github.run_number }}
+        cache-from:
+          type=registry,ref=ghcr.io/${{ github.repository }}:build-cache
+        cache-to:
+          type=registry,ref=ghcr.io/${{ github.repository }}:build-cache,mode=max
+    - if: github.ref_type == 'tag'
+      uses: docker/build-push-action@v5
+      with:
+        push: true
+        platforms: linux/amd64, linux/arm64
+        build-args:
+          VERSION=${{ steps.version.outputs.value }}
+        tags: |
+          ghcr.io/${{ github.repository }}:git-${{ github.sha }}
+          ghcr.io/${{ github.repository }}:${{ steps.version.outputs.value }}
+          ghcr.io/${{ github.repository }}:canary
+          ghcr.io/${{ github.repository }}:latest
+        labels:
+          org.opencontainers.image.revision=${{ github.sha }}
+        annotations: |
+          org.opencontainers.image.title=3o14
+          org.opencontainers.image.description=Federated Microblogging platform
+          org.opencontainers.image.url=https://github.com/3o14-com/backend
+          org.opencontainers.image.source=https://github.com/3o14-com/backend
+          org.opencontainers.image.revision=${{ github.sha }}
+          org.opencontainers.image.licenses=AGPL-3.0-only
+          org.opencontainers.image.version=${{ steps.version.outputs.value }}
+        cache-from:
+          type=registry,ref=ghcr.io/${{ github.repository }}:build-cache
+        cache-to:
+          type=registry,ref=ghcr.io/${{ github.repository }}:build-cache,mode=max

@@ -1,0 +1,6 @@
+.env
+assets/
+3o14-*.tgz
+*.jsonl
+node_modules/
+.direnv
