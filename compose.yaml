@@ -1,6 +1,6 @@
 services:
   3o14:
-    image: ghcr.io/3o14-com/backend:pii
+    image: ghcr.io/3o14-com/tempbackend:pii
     ports:
     - "3000:3000"
     environment:
