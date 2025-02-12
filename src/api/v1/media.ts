@@ -28,6 +28,7 @@ export async function postMedia(c: Context<{ Variables: Variables }>) {
 
     // Handle the mobile upload format
     let fileData: File;
+    console.log(file);
     if (typeof file === 'object' && 'uri' in file) {
       // Convert the mobile format to File
       const response = await fetch(file.uri);
