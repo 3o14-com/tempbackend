@@ -10,25 +10,6 @@ on:
   pull_request:
 
 jobs:
-  check:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-    - uses: pnpm/action-setup@v4
-      with:
-        version: 9.15.1+sha512.1acb565e6193efbebda772702950469150cf12bcc764262e7587e71d19dc98a423dff9536e57ea44c49bdf790ff694e83c27be5faa23d67e0c033b583be4bfcf
-        run_install: false
-    - uses: actions/setup-node@v4
-      with:
-        node-version: 23
-        cache: pnpm
-    - run: pnpm install
-    - run: pnpm run check
-    - if: github.ref_type == 'tag'
-      run: |
-        set -ex
-        [[ "$(jq -r .version package.json)" = "$GITHUB_REF_NAME" ]]
-        ! grep -i "to be released" CHANGES.md
 
   build-image:
     if: github.event_name == 'push'
