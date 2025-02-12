@@ -4,3 +4,4 @@ assets/
 *.jsonl
 node_modules/
 .direnv
+data

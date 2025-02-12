@@ -1,1 +1,0 @@
-ALTER TYPE "post_type" ADD VALUE 'Question';

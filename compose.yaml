@@ -2,19 +2,24 @@ services:
   3o14:
     image: ghcr.io/3o14-com/backend:pii
     ports:
-      - "3000:3000"
+    - "3000:3000"
     environment:
       DATABASE_URL: "postgres://user:password@postgres:5432/database"
       SECRET_KEY: "${SECRET_KEY}"
       LOG_LEVEL: "${LOG_LEVEL}"
       BEHIND_PROXY: "${BEHIND_PROXY}"
-      DRIVE_DISK: fs
-      ASSET_URL_BASE: http://localhost:3000/assets/
-      FS_ASSET_PATH: /var/lib/data
+      DRIVE_DISK: s3
+      ASSET_URL_BASE: http://localhost:9000/3o14/
+      S3_REGION: us-east-1
+      S3_BUCKET: 3o14
+      S3_ENDPOINT_URL: http://minio:9000
+      S3_FORCE_PATH_STYLE: "true"
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
     depends_on:
-      - postgres
-    volumes:
-      - assets_data:/var/lib/data
+    - postgres
+    - minio
+    - create-bucket
     restart: unless-stopped
 
   postgres:
@@ -24,9 +29,32 @@ services:
       POSTGRES_PASSWORD: password
       POSTGRES_DB: database
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+    - postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
+
+  minio:
+    image: minio/minio:RELEASE.2024-09-13T20-26-02Z
+    ports:
+    - "9000:9000"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+    - minio_data:/data
+    command: ["server", "/data", "--console-address", ":9001"]
+
+  create-bucket:
+    image: minio/mc:RELEASE.2024-09-16T17-43-14Z
+    depends_on:
+    - minio
+    entrypoint: |
+      /bin/sh -c "
+        /usr/bin/mc alias set minio http://minio:9000 minioadmin minioadmin;
+        /usr/bin/mc mb minio/3o14;
+        /usr/bin/mc anonymous set public minio/3o14;
+        exit 0;
+      "
 
 volumes:
   postgres_data:
-  assets_data:
+  minio_data:

@@ -1,1 +1,0 @@
-ALTER TABLE "reports" ALTER COLUMN "comment" SET NOT NULL;

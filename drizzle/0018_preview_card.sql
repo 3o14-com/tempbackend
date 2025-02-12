@@ -1,1 +1,0 @@
-ALTER TABLE "posts" ADD COLUMN "preview_card" jsonb;
