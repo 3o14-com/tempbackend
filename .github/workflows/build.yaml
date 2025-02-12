@@ -13,7 +13,6 @@ jobs:
 
   build-image:
     if: github.event_name == 'push'
-    needs: [check]
     permissions:
       contents: read
       packages: write
