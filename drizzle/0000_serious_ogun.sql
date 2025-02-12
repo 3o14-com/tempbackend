@@ -2,7 +2,7 @@ CREATE TYPE "public"."account_type" AS ENUM('Application', 'Group', 'Organizatio
 CREATE TYPE "public"."grant_type" AS ENUM('authorization_code', 'client_credentials');--> statement-breakpoint
 CREATE TYPE "public"."list_replies_policy" AS ENUM('followed', 'list', 'none');--> statement-breakpoint
 CREATE TYPE "public"."marker_type" AS ENUM('notifications', 'home');--> statement-breakpoint
-CREATE TYPE "public"."post_type" AS ENUM('Article', 'Note', 'Question');--> statement-breakpoint
+CREATE TYPE "public"."post_type" AS ENUM('Article', 'Note');--> statement-breakpoint
 CREATE TYPE "public"."post_visibility" AS ENUM('public', 'unlisted', 'private', 'direct');--> statement-breakpoint
 CREATE TYPE "public"."scope" AS ENUM('read', 'read:accounts', 'read:blocks', 'read:bookmarks', 'read:favourites', 'read:filters', 'read:follows', 'read:lists', 'read:mutes', 'read:notifications', 'read:search', 'read:statuses', 'write', 'write:accounts', 'write:blocks', 'write:bookmarks', 'write:conversations', 'write:favourites', 'write:filters', 'write:follows', 'write:lists', 'write:media', 'write:mutes', 'write:notifications', 'write:reports', 'write:statuses', 'follow', 'push');--> statement-breakpoint
 CREATE TABLE "access_tokens" (
@@ -205,31 +205,6 @@ CREATE TABLE "pinned_posts" (
 	CONSTRAINT "pinned_posts_post_id_account_id_unique" UNIQUE("post_id","account_id")
 );
 --> statement-breakpoint
-CREATE TABLE "poll_options" (
-	"poll_id" uuid,
-	"index" integer NOT NULL,
-	"title" text NOT NULL,
-	"votes_count" bigint DEFAULT 0 NOT NULL,
-	CONSTRAINT "poll_options_poll_id_index_pk" PRIMARY KEY("poll_id","index"),
-	CONSTRAINT "poll_options_poll_id_title_unique" UNIQUE("poll_id","title")
-);
---> statement-breakpoint
-CREATE TABLE "poll_votes" (
-	"poll_id" uuid NOT NULL,
-	"option_index" integer NOT NULL,
-	"account_id" uuid NOT NULL,
-	"created" timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-	CONSTRAINT "poll_votes_poll_id_option_index_account_id_pk" PRIMARY KEY("poll_id","option_index","account_id")
-);
---> statement-breakpoint
-CREATE TABLE "polls" (
-	"id" uuid PRIMARY KEY NOT NULL,
-	"multiple" boolean DEFAULT false NOT NULL,
-	"voters_count" bigint DEFAULT 0 NOT NULL,
-	"expires" timestamp with time zone NOT NULL,
-	"created" timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
-);
---> statement-breakpoint
 CREATE TABLE "posts" (
 	"id" uuid PRIMARY KEY NOT NULL,
 	"iri" text NOT NULL,
@@ -243,7 +218,6 @@ CREATE TABLE "posts" (
 	"summary" text,
 	"content_html" text,
 	"content" text,
-	"poll_id" uuid,
 	"language" text,
 	"tags" jsonb DEFAULT '{}'::jsonb NOT NULL,
 	"emojis" jsonb DEFAULT '{}'::jsonb NOT NULL,
@@ -258,7 +232,6 @@ CREATE TABLE "posts" (
 	"updated" timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
 	CONSTRAINT "posts_iri_unique" UNIQUE("iri"),
 	CONSTRAINT "posts_id_actor_id_unique" UNIQUE("id","actor_id"),
-	CONSTRAINT "posts_poll_id_unique" UNIQUE("poll_id"),
 	CONSTRAINT "posts_actor_id_sharing_id_unique" UNIQUE("actor_id","sharing_id")
 );
 --> statement-breakpoint
@@ -326,16 +299,11 @@ ALTER TABLE "mutes" ADD CONSTRAINT "mutes_account_id_accounts_id_fk" FOREIGN KEY
 ALTER TABLE "mutes" ADD CONSTRAINT "mutes_muted_account_id_accounts_id_fk" FOREIGN KEY ("muted_account_id") REFERENCES "public"."accounts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "pinned_posts" ADD CONSTRAINT "pinned_posts_account_id_accounts_id_fk" FOREIGN KEY ("account_id") REFERENCES "public"."accounts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "pinned_posts" ADD CONSTRAINT "pinned_posts_post_id_account_id_posts_id_actor_id_fk" FOREIGN KEY ("post_id","account_id") REFERENCES "public"."posts"("id","actor_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "poll_options" ADD CONSTRAINT "poll_options_poll_id_polls_id_fk" FOREIGN KEY ("poll_id") REFERENCES "public"."polls"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "poll_votes" ADD CONSTRAINT "poll_votes_poll_id_polls_id_fk" FOREIGN KEY ("poll_id") REFERENCES "public"."polls"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "poll_votes" ADD CONSTRAINT "poll_votes_account_id_accounts_id_fk" FOREIGN KEY ("account_id") REFERENCES "public"."accounts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "poll_votes" ADD CONSTRAINT "poll_votes_poll_id_option_index_poll_options_poll_id_index_fk" FOREIGN KEY ("poll_id","option_index") REFERENCES "public"."poll_options"("poll_id","index") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "posts" ADD CONSTRAINT "posts_actor_id_accounts_id_fk" FOREIGN KEY ("actor_id") REFERENCES "public"."accounts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "posts" ADD CONSTRAINT "posts_application_id_applications_id_fk" FOREIGN KEY ("application_id") REFERENCES "public"."applications"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "posts" ADD CONSTRAINT "posts_reply_target_id_posts_id_fk" FOREIGN KEY ("reply_target_id") REFERENCES "public"."posts"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "posts" ADD CONSTRAINT "posts_sharing_id_posts_id_fk" FOREIGN KEY ("sharing_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "posts" ADD CONSTRAINT "posts_quote_target_id_posts_id_fk" FOREIGN KEY ("quote_target_id") REFERENCES "public"."posts"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "posts" ADD CONSTRAINT "posts_poll_id_polls_id_fk" FOREIGN KEY ("poll_id") REFERENCES "public"."polls"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "reactions" ADD CONSTRAINT "reactions_post_id_posts_id_fk" FOREIGN KEY ("post_id") REFERENCES "public"."posts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "reactions" ADD CONSTRAINT "reactions_account_id_accounts_id_fk" FOREIGN KEY ("account_id") REFERENCES "public"."accounts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "reports" ADD CONSTRAINT "reports_account_id_accounts_id_fk" FOREIGN KEY ("account_id") REFERENCES "public"."accounts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -350,8 +318,6 @@ CREATE INDEX "list_posts_list_id_post_id_index" ON "list_posts" USING btree ("li
 CREATE INDEX "media_post_id_index" ON "media" USING btree ("post_id");--> statement-breakpoint
 CREATE INDEX "mentions_post_id_account_id_index" ON "mentions" USING btree ("post_id","account_id");--> statement-breakpoint
 CREATE INDEX "pinned_posts_account_id_post_id_index" ON "pinned_posts" USING btree ("account_id","post_id");--> statement-breakpoint
-CREATE INDEX "poll_options_poll_id_index_index" ON "poll_options" USING btree ("poll_id","index");--> statement-breakpoint
-CREATE INDEX "poll_votes_poll_id_account_id_index" ON "poll_votes" USING btree ("poll_id","account_id");--> statement-breakpoint
 CREATE INDEX "posts_sharing_id_index" ON "posts" USING btree ("sharing_id");--> statement-breakpoint
 CREATE INDEX "posts_actor_id_index" ON "posts" USING btree ("actor_id");--> statement-breakpoint
 CREATE INDEX "posts_actor_id_sharing_id_index" ON "posts" USING btree ("actor_id","sharing_id");--> statement-breakpoint

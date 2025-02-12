@@ -1,5 +1,5 @@
 {
-  "id": "47811cea-0f72-4667-9b77-18e627af3a8f",
+  "id": "a31a703a-1dd7-438e-b076-ea13b87234ef",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -1704,254 +1704,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.poll_options": {
-      "name": "poll_options",
-      "schema": "",
-      "columns": {
-        "poll_id": {
-          "name": "poll_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "index": {
-          "name": "index",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "title": {
-          "name": "title",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "votes_count": {
-          "name": "votes_count",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        }
-      },
-      "indexes": {
-        "poll_options_poll_id_index_index": {
-          "name": "poll_options_poll_id_index_index",
-          "columns": [
-            {
-              "expression": "poll_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "index",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "poll_options_poll_id_polls_id_fk": {
-          "name": "poll_options_poll_id_polls_id_fk",
-          "tableFrom": "poll_options",
-          "tableTo": "polls",
-          "columnsFrom": [
-            "poll_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "poll_options_poll_id_index_pk": {
-          "name": "poll_options_poll_id_index_pk",
-          "columns": [
-            "poll_id",
-            "index"
-          ]
-        }
-      },
-      "uniqueConstraints": {
-        "poll_options_poll_id_title_unique": {
-          "name": "poll_options_poll_id_title_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "poll_id",
-            "title"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.poll_votes": {
-      "name": "poll_votes",
-      "schema": "",
-      "columns": {
-        "poll_id": {
-          "name": "poll_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "option_index": {
-          "name": "option_index",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "account_id": {
-          "name": "account_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created": {
-          "name": "created",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "CURRENT_TIMESTAMP"
-        }
-      },
-      "indexes": {
-        "poll_votes_poll_id_account_id_index": {
-          "name": "poll_votes_poll_id_account_id_index",
-          "columns": [
-            {
-              "expression": "poll_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "account_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "poll_votes_poll_id_polls_id_fk": {
-          "name": "poll_votes_poll_id_polls_id_fk",
-          "tableFrom": "poll_votes",
-          "tableTo": "polls",
-          "columnsFrom": [
-            "poll_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "poll_votes_account_id_accounts_id_fk": {
-          "name": "poll_votes_account_id_accounts_id_fk",
-          "tableFrom": "poll_votes",
-          "tableTo": "accounts",
-          "columnsFrom": [
-            "account_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "poll_votes_poll_id_option_index_poll_options_poll_id_index_fk": {
-          "name": "poll_votes_poll_id_option_index_poll_options_poll_id_index_fk",
-          "tableFrom": "poll_votes",
-          "tableTo": "poll_options",
-          "columnsFrom": [
-            "poll_id",
-            "option_index"
-          ],
-          "columnsTo": [
-            "poll_id",
-            "index"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "poll_votes_poll_id_option_index_account_id_pk": {
-          "name": "poll_votes_poll_id_option_index_account_id_pk",
-          "columns": [
-            "poll_id",
-            "option_index",
-            "account_id"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.polls": {
-      "name": "polls",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "multiple": {
-          "name": "multiple",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "voters_count": {
-          "name": "voters_count",
-          "type": "bigint",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "expires": {
-          "name": "expires",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created": {
-          "name": "created",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "CURRENT_TIMESTAMP"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.posts": {
       "name": "posts",
       "schema": "",
@@ -2027,12 +1779,6 @@
         "content": {
           "name": "content",
           "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "poll_id": {
-          "name": "poll_id",
-          "type": "uuid",
           "primaryKey": false,
           "notNull": false
         },
@@ -2326,19 +2072,6 @@
           ],
           "onDelete": "set null",
           "onUpdate": "no action"
-        },
-        "posts_poll_id_polls_id_fk": {
-          "name": "posts_poll_id_polls_id_fk",
-          "tableFrom": "posts",
-          "tableTo": "polls",
-          "columnsFrom": [
-            "poll_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -2356,13 +2089,6 @@
           "columns": [
             "id",
             "actor_id"
-          ]
-        },
-        "posts_poll_id_unique": {
-          "name": "posts_poll_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "poll_id"
           ]
         },
         "posts_actor_id_sharing_id_unique": {
@@ -2774,8 +2500,7 @@
       "schema": "public",
       "values": [
         "Article",
-        "Note",
-        "Question"
+        "Note"
       ]
     },
     "public.post_visibility": {
