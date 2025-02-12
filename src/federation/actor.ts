@@ -18,7 +18,6 @@ import {
   follows,
   likes,
   pinnedPosts,
-  pollOptions,
   posts,
 } from "../schema";
 import { toTemporalInstant } from "./date";
@@ -230,7 +229,6 @@ federation
           replyTarget: true,
           quoteTarget: true,
           media: true,
-          poll: { with: { options: true } },
           mentions: { with: { account: true } },
           sharing: { with: { account: true } },
           replies: true,
@@ -327,7 +325,6 @@ federation.setFeaturedDispatcher(
             replyTarget: true,
             quoteTarget: true,
             media: true,
-            poll: { with: { options: { orderBy: pollOptions.index } } },
             mentions: { with: { account: true } },
             replies: true,
           },

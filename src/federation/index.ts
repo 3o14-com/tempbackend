@@ -10,7 +10,6 @@ import {
   Follow,
   Like,
   Move,
-  Note,
   Reject,
   Remove,
   Undo,
@@ -43,7 +42,6 @@ import {
   onUnblocked,
   onUnfollowed,
   onUnliked,
-  onVoted,
 } from "./inbox";
 import "./nodeinfo";
 import "./objects";
@@ -62,14 +60,7 @@ federation
   .on(Reject, onFollowRejected)
   .on(Create, async (ctx, create) => {
     const object = await create.getObject();
-    if (
-      object instanceof Note &&
-      object.replyTargetId != null &&
-      object.attributionId != null &&
-      object.name != null
-    ) {
-      await onVoted(ctx, create);
-    } else if (isPost(object)) {
+    if (isPost(object)) {
       await onPostCreated(ctx, create);
     } else {
       inboxLogger.debug("Unsupported object on Create: {object}", { object });

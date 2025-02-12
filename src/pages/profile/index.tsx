@@ -10,8 +10,6 @@ import {
   type AccountOwner,
   type FeaturedTag,
   type Medium,
-  type Poll,
-  type PollOption,
   type Post,
   type Reaction,
   accountOwners,
@@ -74,18 +72,15 @@ profile.get<"/:handle">(async (c) => {
     with: {
       account: true,
       media: true,
-      poll: { with: { options: true } },
       sharing: {
         with: {
           account: true,
           media: true,
-          poll: { with: { options: true } },
           replyTarget: { with: { account: true } },
           quoteTarget: {
             with: {
               account: true,
               media: true,
-              poll: { with: { options: true } },
               replyTarget: { with: { account: true } },
               reactions: true,
             },
@@ -98,7 +93,6 @@ profile.get<"/:handle">(async (c) => {
         with: {
           account: true,
           media: true,
-          poll: { with: { options: true } },
           replyTarget: { with: { account: true } },
           reactions: true,
         },
@@ -109,47 +103,43 @@ profile.get<"/:handle">(async (c) => {
   const pinnedPostList =
     cont == null
       ? await db.query.pinnedPosts.findMany({
-          where: and(eq(pinnedPosts.accountId, owner.id)),
-          orderBy: desc(pinnedPosts.index),
-          with: {
-            post: {
-              with: {
-                account: true,
-                media: true,
-                poll: { with: { options: true } },
-                sharing: {
-                  with: {
-                    account: true,
-                    media: true,
-                    poll: { with: { options: true } },
-                    replyTarget: { with: { account: true } },
-                    quoteTarget: {
-                      with: {
-                        account: true,
-                        media: true,
-                        poll: { with: { options: true } },
-                        replyTarget: { with: { account: true } },
-                        reactions: true,
-                      },
+        where: and(eq(pinnedPosts.accountId, owner.id)),
+        orderBy: desc(pinnedPosts.index),
+        with: {
+          post: {
+            with: {
+              account: true,
+              media: true,
+              sharing: {
+                with: {
+                  account: true,
+                  media: true,
+                  replyTarget: { with: { account: true } },
+                  quoteTarget: {
+                    with: {
+                      account: true,
+                      media: true,
+                      replyTarget: { with: { account: true } },
+                      reactions: true,
                     },
-                    reactions: true,
                   },
+                  reactions: true,
                 },
-                replyTarget: { with: { account: true } },
-                quoteTarget: {
-                  with: {
-                    account: true,
-                    media: true,
-                    poll: { with: { options: true } },
-                    replyTarget: { with: { account: true } },
-                    reactions: true,
-                  },
-                },
-                reactions: true,
               },
+              replyTarget: { with: { account: true } },
+              quoteTarget: {
+                with: {
+                  account: true,
+                  media: true,
+                  replyTarget: { with: { account: true } },
+                  reactions: true,
+                },
+              },
+              reactions: true,
             },
           },
-        })
+        },
+      })
       : [];
   const featuredTagList = await db.query.featuredTags.findMany({
     where: eq(featuredTags.accountOwnerId, owner.id),
@@ -182,69 +172,61 @@ interface ProfilePageProps {
   readonly posts: (Post & {
     account: Account;
     media: Medium[];
-    poll: (Poll & { options: PollOption[] }) | null;
     sharing:
+    | (Post & {
+      account: Account;
+      media: Medium[];
+      replyTarget: (Post & { account: Account }) | null;
+      quoteTarget:
       | (Post & {
-          account: Account;
-          media: Medium[];
-          poll: (Poll & { options: PollOption[] }) | null;
-          replyTarget: (Post & { account: Account }) | null;
-          quoteTarget:
-            | (Post & {
-                account: Account;
-                media: Medium[];
-                poll: (Poll & { options: PollOption[] }) | null;
-                replyTarget: (Post & { account: Account }) | null;
-                reactions: Reaction[];
-              })
-            | null;
-          reactions: Reaction[];
-        })
+        account: Account;
+        media: Medium[];
+        replyTarget: (Post & { account: Account }) | null;
+        reactions: Reaction[];
+      })
       | null;
+      reactions: Reaction[];
+    })
+    | null;
     replyTarget: (Post & { account: Account }) | null;
     quoteTarget:
-      | (Post & {
-          account: Account;
-          media: Medium[];
-          poll: (Poll & { options: PollOption[] }) | null;
-          replyTarget: (Post & { account: Account }) | null;
-          reactions: Reaction[];
-        })
-      | null;
+    | (Post & {
+      account: Account;
+      media: Medium[];
+      replyTarget: (Post & { account: Account }) | null;
+      reactions: Reaction[];
+    })
+    | null;
     reactions: Reaction[];
   })[];
   readonly pinnedPosts: (Post & {
     account: Account;
     media: Medium[];
-    poll: (Poll & { options: PollOption[] }) | null;
     sharing:
+    | (Post & {
+      account: Account;
+      media: Medium[];
+      replyTarget: (Post & { account: Account }) | null;
+      quoteTarget:
       | (Post & {
-          account: Account;
-          media: Medium[];
-          poll: (Poll & { options: PollOption[] }) | null;
-          replyTarget: (Post & { account: Account }) | null;
-          quoteTarget:
-            | (Post & {
-                account: Account;
-                media: Medium[];
-                poll: (Poll & { options: PollOption[] }) | null;
-                replyTarget: (Post & { account: Account }) | null;
-                reactions: Reaction[];
-              })
-            | null;
-          reactions: Reaction[];
-        })
+        account: Account;
+        media: Medium[];
+        replyTarget: (Post & { account: Account }) | null;
+        reactions: Reaction[];
+      })
       | null;
+      reactions: Reaction[];
+    })
+    | null;
     replyTarget: (Post & { account: Account }) | null;
     quoteTarget:
-      | (Post & {
-          account: Account;
-          media: Medium[];
-          poll: (Poll & { options: PollOption[] }) | null;
-          replyTarget: (Post & { account: Account }) | null;
-          reactions: Reaction[];
-        })
-      | null;
+    | (Post & {
+      account: Account;
+      media: Medium[];
+      replyTarget: (Post & { account: Account }) | null;
+      reactions: Reaction[];
+    })
+    | null;
     reactions: Reaction[];
   })[];
   readonly featuredTags: FeaturedTag[];
@@ -279,9 +261,8 @@ function ProfilePage({
           {featuredTags.map((tag) => (
             <>
               <a
-                href={`/tags/${encodeURIComponent(tag.name)}?handle=${
-                  accountOwner.handle
-                }`}
+                href={`/tags/${encodeURIComponent(tag.name)}?handle=${accountOwner.handle
+                  }`}
               >
                 #{tag.name}
               </a>{" "}

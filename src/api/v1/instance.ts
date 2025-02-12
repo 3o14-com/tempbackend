@@ -70,12 +70,6 @@ app.get("/", async (c) => {
         video_frame_rate_limit: 120,
         video_matrix_limit: 16_777_216,
       },
-      polls: {
-        max_options: 10,
-        max_characters_per_option: 100,
-        min_expiration: 60 * 5,
-        max_expiration: 60 * 60 * 24 * 14,
-      },
     },
     contact_account: serializeAccountOwner(accountOwner, c.req.url),
     rules: [],

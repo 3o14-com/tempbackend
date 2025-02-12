@@ -9,22 +9,16 @@ import {
   type Medium,
   type Mention,
   type PinnedPost,
-  type Poll,
-  type PollOption,
-  type PollVote,
   type Post,
   type Reaction,
   bookmarks,
   likes,
-  pollOptions,
-  pollVotes,
   posts,
 } from "../schema";
 import type { Uuid } from "../uuid";
 import { serializeAccount } from "./account";
 import { serializeEmojis, serializeReactions } from "./emoji";
 import { serializeMedium } from "./medium";
-import { serializePoll } from "./poll";
 
 export function getPostRelations(ownerId: Uuid) {
   return {
@@ -42,12 +36,6 @@ export function getPostRelations(ownerId: Uuid) {
             application: true,
             replyTarget: true,
             media: true,
-            poll: {
-              with: {
-                options: { orderBy: pollOptions.index },
-                votes: { where: eq(pollVotes.accountId, ownerId) },
-              },
-            },
             mentions: {
               with: { account: { with: { owner: true, successor: true } } },
             },
@@ -59,12 +47,6 @@ export function getPostRelations(ownerId: Uuid) {
           },
         },
         media: true,
-        poll: {
-          with: {
-            options: { orderBy: pollOptions.index },
-            votes: { where: eq(pollVotes.accountId, ownerId) },
-          },
-        },
         mentions: {
           with: { account: { with: { owner: true, successor: true } } },
         },
@@ -81,12 +63,6 @@ export function getPostRelations(ownerId: Uuid) {
         application: true,
         replyTarget: true,
         media: true,
-        poll: {
-          with: {
-            options: { orderBy: pollOptions.index },
-            votes: { where: eq(pollVotes.accountId, ownerId) },
-          },
-        },
         mentions: {
           with: { account: { with: { owner: true, successor: true } } },
         },
@@ -98,12 +74,6 @@ export function getPostRelations(ownerId: Uuid) {
       },
     },
     media: true,
-    poll: {
-      with: {
-        options: { orderBy: pollOptions.index },
-        votes: { where: eq(pollVotes.accountId, ownerId) },
-      },
-    },
     mentions: { with: { account: { with: { owner: true, successor: true } } } },
     likes: { where: eq(likes.accountId, ownerId) },
     reactions: { with: { account: { with: { successor: true } } } },
@@ -120,75 +90,69 @@ export function serializePost(
     application: Application | null;
     replyTarget: Post | null;
     sharing:
+    | (Post & {
+      account: Account & { successor: Account | null };
+      application: Application | null;
+      replyTarget: Post | null;
+      quoteTarget:
       | (Post & {
+        account: Account & { successor: Account | null };
+        application: Application | null;
+        replyTarget: Post | null;
+        media: Medium[];
+        mentions: (Mention & {
+          account: Account & {
+            owner: AccountOwner | null;
+            successor: Account | null;
+          };
+        })[];
+        likes: Like[];
+        reactions: (Reaction & {
           account: Account & { successor: Account | null };
-          application: Application | null;
-          replyTarget: Post | null;
-          quoteTarget:
-            | (Post & {
-                account: Account & { successor: Account | null };
-                application: Application | null;
-                replyTarget: Post | null;
-                media: Medium[];
-                poll:
-                  | (Poll & { options: PollOption[]; votes: PollVote[] })
-                  | null;
-                mentions: (Mention & {
-                  account: Account & {
-                    owner: AccountOwner | null;
-                    successor: Account | null;
-                  };
-                })[];
-                likes: Like[];
-                reactions: (Reaction & {
-                  account: Account & { successor: Account | null };
-                })[];
-                shares: Post[];
-                bookmarks: Bookmark[];
-                pin: PinnedPost | null;
-              })
-            | null;
-          media: Medium[];
-          poll: (Poll & { options: PollOption[]; votes: PollVote[] }) | null;
-          mentions: (Mention & {
-            account: Account & {
-              owner: AccountOwner | null;
-              successor: Account | null;
-            };
-          })[];
-          likes: Like[];
-          reactions: (Reaction & {
-            account: Account & { successor: Account | null };
-          })[];
-          shares: Post[];
-          bookmarks: Bookmark[];
-          pin: PinnedPost | null;
-        })
+        })[];
+        shares: Post[];
+        bookmarks: Bookmark[];
+        pin: PinnedPost | null;
+      })
       | null;
+      media: Medium[];
+      mentions: (Mention & {
+        account: Account & {
+          owner: AccountOwner | null;
+          successor: Account | null;
+        };
+      })[];
+      likes: Like[];
+      reactions: (Reaction & {
+        account: Account & { successor: Account | null };
+      })[];
+      shares: Post[];
+      bookmarks: Bookmark[];
+      pin: PinnedPost | null;
+    })
+    | null;
     quoteTarget:
-      | (Post & {
-          account: Account & { successor: Account | null };
-          application: Application | null;
-          replyTarget: Post | null;
-          media: Medium[];
-          poll: (Poll & { options: PollOption[]; votes: PollVote[] }) | null;
-          mentions: (Mention & {
-            account: Account & {
-              owner: AccountOwner | null;
-              successor: Account | null;
-            };
-          })[];
-          likes: Like[];
-          reactions: (Reaction & {
-            account: Account & { successor: Account | null };
-          })[];
-          shares: Post[];
-          bookmarks: Bookmark[];
-          pin: PinnedPost | null;
-        })
-      | null;
+    | (Post & {
+      account: Account & { successor: Account | null };
+      application: Application | null;
+      replyTarget: Post | null;
+      media: Medium[];
+      mentions: (Mention & {
+        account: Account & {
+          owner: AccountOwner | null;
+          successor: Account | null;
+        };
+      })[];
+      likes: Like[];
+      reactions: (Reaction & {
+        account: Account & { successor: Account | null };
+      })[];
+      shares: Post[];
+      bookmarks: Bookmark[];
+      pin: PinnedPost | null;
+    })
+    | null;
     media: Medium[];
-    poll: (Poll & { options: PollOption[]; votes: PollVote[] }) | null;
     mentions: (Mention & {
       account: Account & {
         owner: AccountOwner | null;
@@ -237,26 +201,26 @@ export function serializePost(
       post.sharing == null
         ? null
         : serializePost(
-            { ...post.sharing, sharing: null },
-            currentAccountOwner,
-            baseUrl,
-          ),
+          { ...post.sharing, sharing: null },
+          currentAccountOwner,
+          baseUrl,
+        ),
     quote_id: post.quoteTargetId,
     quote:
       post.quoteTarget == null
         ? null
         : serializePost(
-            { ...post.quoteTarget, quoteTarget: null, sharing: null },
-            currentAccountOwner,
-            baseUrl,
-          ),
+          { ...post.quoteTarget, quoteTarget: null, sharing: null },
+          currentAccountOwner,
+          baseUrl,
+        ),
     application:
       post.application == null
         ? null
         : {
-            name: post.application.name,
-            website: post.application.website,
-          },
+          name: post.application.name,
+          website: post.application.website,
+        },
     account: serializeAccount(post.account, baseUrl),
     media_attachments: post.media.map(serializeMedium),
     mentions: post.mentions.map((mention) => ({
@@ -276,8 +240,6 @@ export function serializePost(
       post.previewCard == null ? null : serializePreviewCard(post.previewCard),
     emojis: serializeEmojis(post.emojis),
     emoji_reactions: serializeReactions(post.reactions, currentAccountOwner),
-    poll:
-      post.poll == null ? null : serializePoll(post.poll, currentAccountOwner),
     filtered: null,
   };
 }

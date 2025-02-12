@@ -35,7 +35,6 @@ import {
   follows,
   likes,
   pinnedPosts,
-  pollOptions,
   posts,
   reactions,
 } from "../schema";
@@ -48,7 +47,6 @@ import {
 } from "./account";
 import {
   isPost,
-  persistPollVote,
   persistPost,
   persistSharingPost,
   toUpdate,
@@ -352,7 +350,6 @@ export async function onPostCreated(
         replyTarget: true,
         quoteTarget: true,
         media: true,
-        poll: { with: { options: true } },
         mentions: { with: { account: true } },
         replies: true,
       },
@@ -729,57 +726,6 @@ export async function onEmojiReactionRemoved(
   });
 }
 
-export async function onVoted(
-  ctx: InboxContext<void>,
-  create: Create,
-): Promise<void> {
-  const object = await create.getObject();
-  if (
-    !(object instanceof Note) ||
-    object.replyTargetId == null ||
-    object.attributionId == null ||
-    object.name == null
-  ) {
-    return;
-  }
-  const vote = await db.transaction((tx) =>
-    persistPollVote(tx, object, ctx.origin, ctx),
-  );
-  if (vote == null) return;
-  const post = await db.query.posts.findFirst({
-    with: {
-      account: { with: { owner: true } },
-      replyTarget: true,
-      quoteTarget: true,
-      media: true,
-      poll: {
-        with: {
-          options: { orderBy: pollOptions.index },
-          votes: { with: { account: true } },
-        },
-      },
-      mentions: { with: { account: true } },
-      replies: true,
-    },
-    where: eq(posts.pollId, vote.pollId),
-  });
-  if (post?.account.owner == null || post.poll == null) return;
-  await ctx.sendActivity(
-    { username: post.account.owner.handle },
-    post.poll.votes.map((v) => ({
-      id: new URL(v.account.iri),
-      inboxId: new URL(v.account.inboxUrl),
-      endpoints:
-        v.account.sharedInboxUrl == null
-          ? null
-          : {
-            sharedInbox: new URL(v.account.sharedInboxUrl),
-          },
-    })),
-    toUpdate(post, ctx),
-    { preferSharedInbox: true, excludeBaseUris: [new URL(ctx.origin)] },
-  );
-}
 
 export async function onAccountMoved(
   ctx: InboxContext<void>,

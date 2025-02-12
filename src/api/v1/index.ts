@@ -25,7 +25,6 @@ import lists from "./lists";
 import markers from "./markers";
 import media from "./media";
 import notifications from "./notifications";
-import polls from "./polls";
 import reports from "./reports";
 import statuses from "./statuses";
 import tags from "./tags";
@@ -42,7 +41,6 @@ app.route("/lists", lists);
 app.route("/markers", markers);
 app.route("/media", media);
 app.route("/notifications", notifications);
-app.route("/polls", polls);
 app.route("/statuses", statuses);
 app.route("/tags", tags);
 app.route("/timelines", timelines);
@@ -123,15 +121,14 @@ app.get(
       favourites.length < query.limit
         ? {}
         : {
-            Link: `<${
-              new URL(
-                `?before=${encodeURIComponent(
-                  favourites[favourites.length - 1].created.toISOString(),
-                )}&limit=${query.limit}`,
-                c.req.url,
-              ).href
+          Link: `<${new URL(
+            `?before=${encodeURIComponent(
+              favourites[favourites.length - 1].created.toISOString(),
+            )}&limit=${query.limit}`,
+            c.req.url,
+          ).href
             }>; rel="next"`,
-          },
+        },
     );
   },
 );
@@ -178,15 +175,14 @@ app.get(
       bookmarkList.length < query.limit
         ? {}
         : {
-            Link: `<${
-              new URL(
-                `?before=${encodeURIComponent(
-                  bookmarkList[bookmarkList.length - 1].created.toISOString(),
-                )}&limit=${query.limit}`,
-                c.req.url,
-              ).href
+          Link: `<${new URL(
+            `?before=${encodeURIComponent(
+              bookmarkList[bookmarkList.length - 1].created.toISOString(),
+            )}&limit=${query.limit}`,
+            c.req.url,
+          ).href
             }>; rel="next"`,
-          },
+        },
     );
   },
 );

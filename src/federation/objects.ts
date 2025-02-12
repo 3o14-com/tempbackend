@@ -6,7 +6,6 @@ import {
   accounts,
   customEmojis,
   follows,
-  pollOptions,
   posts,
   reports,
 } from "../schema";
@@ -36,7 +35,6 @@ federation.setObjectDispatcher(
         replyTarget: true,
         quoteTarget: true,
         media: true,
-        poll: { with: { options: { orderBy: pollOptions.index } } },
         mentions: { with: { account: true } },
         replies: true,
       },

@@ -8,7 +8,6 @@ import {
   isNotNull,
   isNull,
   lt,
-  lte,
   ne,
   notInArray,
   or,
@@ -31,8 +30,6 @@ import {
   likes,
   mentions,
   mutes,
-  pollVotes,
-  polls,
   posts,
   reactions,
 } from "../../schema";
@@ -50,7 +47,6 @@ export type NotificationType =
   | "follow_request"
   | "favourite"
   | "emoji_reaction"
-  | "poll"
   | "update"
   | "admin.sign_up"
   | "admin.report";
@@ -81,7 +77,6 @@ app.get(
         "follow_request",
         "favourite",
         "emoji_reaction",
-        "poll",
         "update",
         "admin.sign_up",
         "admin.report",
@@ -419,75 +414,6 @@ app.get(
           ),
         )
         .orderBy(desc(reactions.created))
-        .limit(limit),
-      poll: db
-        .select({
-          id: sql<string>`${polls.id}::text`,
-          type: sql<NotificationType>`'poll'`,
-          created: polls.expires,
-          accountId: posts.accountId,
-          postId: posts.id,
-          emoji: sql<string | null>`null`,
-          customEmoji: sql<string | null>`null`,
-        })
-        .from(polls)
-        .leftJoin(posts, eq(polls.id, posts.pollId))
-        .where(
-          and(
-            or(
-              inArray(
-                polls.id,
-                db
-                  .select({ id: posts.pollId })
-                  .from(posts)
-                  .where(eq(posts.accountId, owner.id)),
-              ),
-              inArray(
-                polls.id,
-                db
-                  .select({ id: pollVotes.pollId })
-                  .from(pollVotes)
-                  .where(eq(pollVotes.accountId, owner.id)),
-              ),
-            ),
-            lte(polls.expires, sql`current_timestamp`),
-            olderThan == null ? undefined : lt(polls.expires, olderThan),
-            ne(posts.accountId, owner.id),
-            notInArray(
-              posts.accountId,
-              db
-                .select({ accountId: mutes.mutedAccountId })
-                .from(mutes)
-                .where(
-                  and(
-                    eq(mutes.accountId, owner.id),
-                    or(
-                      isNull(mutes.duration),
-                      gt(
-                        sql`${mutes.created} + ${mutes.duration}`,
-                        sql`CURRENT_TIMESTAMP`,
-                      ),
-                    ),
-                  ),
-                ),
-            ),
-            notInArray(
-              posts.accountId,
-              db
-                .select({ accountId: blocks.blockedAccountId })
-                .from(blocks)
-                .where(eq(blocks.accountId, owner.id)),
-            ),
-            notInArray(
-              posts.accountId,
-              db
-                .select({ accountId: blocks.accountId })
-                .from(blocks)
-                .where(eq(blocks.blockedAccountId, owner.id)),
-            ),
-          ),
-        )
-        .orderBy(desc(polls.expires))
         .limit(limit),
     };
     const qs = Object.entries(queries)

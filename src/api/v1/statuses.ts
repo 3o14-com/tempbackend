@@ -48,9 +48,7 @@ import {
   type NewBookmark,
   type NewLike,
   type NewPinnedPost,
-  type NewPollOption,
   type NewPost,
-  type Poll,
   blocks,
   bookmarks,
   customEmojis,
@@ -59,8 +57,6 @@ import {
   mentions,
   mutes,
   pinnedPosts,
-  pollOptions,
-  polls,
   posts,
   reactions,
 } from "../../schema";
@@ -72,20 +68,6 @@ const app = new Hono<{ Variables: Variables }>();
 const statusSchema = z.object({
   status: z.string().min(1).optional(),
   media_ids: z.array(uuid).optional(),
-  poll: z
-    .object({
-      options: z.array(z.string()),
-      expires_in: z.union([
-        z.number().int(),
-        z
-          .string()
-          .regex(/^\d+$/)
-          .transform((v) => Number.parseInt(v)),
-      ]),
-      multiple: z.boolean().default(false),
-      hide_totals: z.boolean().default(false),
-    })
-    .optional(),
   sensitive: z.boolean().default(false),
   spoiler_text: z.string().optional(),
   language: z.string().min(2).optional(),
@@ -175,36 +157,12 @@ app.post(
       if (quoted != null) quoteTargetId = quoted.id;
     }
     await db.transaction(async (tx) => {
-      let poll: Poll | null = null;
-      if (data.poll != null) {
-        const expires = new Date(
-          new Date().getTime() + data.poll.expires_in * 1000,
-        );
-        [poll] = await tx
-          .insert(polls)
-          .values({
-            id: uuidv7(),
-            multiple: data.poll.multiple,
-            expires,
-          })
-          .returning();
-        await tx.insert(pollOptions).values(
-          data.poll.options.map(
-            (title, index) =>
-              ({
-                pollId: poll!.id,
-                index,
-                title,
-              }) satisfies NewPollOption,
-          ),
-        );
-      }
       const insertedRows = await tx
         .insert(posts)
         .values({
           id,
           iri: url.href,
-          type: poll == null ? "Note" : "Question",
+          type: "Note",
           accountId: owner.id,
           applicationId: token.applicationId,
           replyTargetId: data.in_reply_to_id,
@@ -215,7 +173,6 @@ app.post(
           content: data.status,
           contentHtml: content?.html,
           language: data.language ?? owner.language,
-          pollId: poll == null ? null : poll.id,
           tags,
           emojis,
           sensitive: data.sensitive,
@@ -259,8 +216,8 @@ app.post(
           insertedRows[0].replyTargetId == null
             ? null
             : ((await db.query.posts.findFirst({
-                where: eq(posts.id, insertedRows[0].replyTargetId),
-              })) ?? null),
+              where: eq(posts.id, insertedRows[0].replyTargetId),
+            })) ?? null),
       });
     });
     const post = (await db.query.posts.findFirst({
@@ -705,9 +662,9 @@ app.get(
         l.account.owner == null
           ? serializeAccount(l.account, c.req.url)
           : serializeAccountOwner(
-              { ...l.account.owner, account: l.account },
-              c.req.url,
-            ),
+            { ...l.account.owner, account: l.account },
+            c.req.url,
+          ),
       ),
     );
   },
@@ -904,9 +861,9 @@ app.get(
         s.account.owner == null
           ? serializeAccount(s.account, c.req.url)
           : serializeAccountOwner(
-              { ...s.account.owner, account: s.account },
-              c.req.url,
-            ),
+            { ...s.account.owner, account: s.account },
+            c.req.url,
+          ),
       ),
     );
   },
@@ -1198,8 +1155,8 @@ async function addEmojiReaction(
         post.account.sharedInboxUrl == null
           ? null
           : {
-              sharedInbox: new URL(post.account.sharedInboxUrl),
-            },
+            sharedInbox: new URL(post.account.sharedInboxUrl),
+          },
     },
     activity,
     { preferSharedInbox: true, excludeBaseUris: [new URL(c.req.url)] },
@@ -1268,14 +1225,14 @@ async function removeEmojiReaction(
         reaction.emojiIri == null || reaction.customEmoji == null
           ? []
           : [
-              new Emoji({
-                id: new URL(reaction.emojiIri),
-                name: reaction.emoji,
-                icon: new Image({
-                  url: new URL(reaction.customEmoji),
-                }),
+            new Emoji({
+              id: new URL(reaction.emojiIri),
+              name: reaction.emoji,
+              icon: new Image({
+                url: new URL(reaction.customEmoji),
               }),
-            ],
+            }),
+          ],
     }),
   });
   await fedCtx.sendActivity({ username: owner.handle }, "followers", activity, {
@@ -1291,8 +1248,8 @@ async function removeEmojiReaction(
         post.account.sharedInboxUrl == null
           ? null
           : {
-              sharedInbox: new URL(post.account.sharedInboxUrl),
-            },
+            sharedInbox: new URL(post.account.sharedInboxUrl),
+          },
     },
     activity,
     { preferSharedInbox: true, excludeBaseUris: [new URL(c.req.url)] },

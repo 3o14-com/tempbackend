@@ -6,8 +6,6 @@ import db from "../../db.ts";
 import {
   type Account,
   type Medium,
-  type Poll,
-  type PollOption,
   type Post,
   type Reaction,
   accountOwners,
@@ -37,18 +35,15 @@ profilePost.get<"/:handle{@[^/]+}/:id{[-a-f0-9]+}">(async (c) => {
     with: {
       account: true,
       media: true,
-      poll: { with: { options: true } },
       sharing: {
         with: {
           account: true,
           media: true,
-          poll: { with: { options: true } },
           replyTarget: { with: { account: true } },
           quoteTarget: {
             with: {
               account: true,
               media: true,
-              poll: { with: { options: true } },
               replyTarget: { with: { account: true } },
               reactions: true,
             },
@@ -61,7 +56,6 @@ profilePost.get<"/:handle{@[^/]+}/:id{[-a-f0-9]+}">(async (c) => {
         with: {
           account: true,
           media: true,
-          poll: { with: { options: true } },
           replyTarget: { with: { account: true } },
           reactions: true,
         },
@@ -70,18 +64,15 @@ profilePost.get<"/:handle{@[^/]+}/:id{[-a-f0-9]+}">(async (c) => {
         with: {
           account: true,
           media: true,
-          poll: { with: { options: true } },
           sharing: {
             with: {
               account: true,
               media: true,
-              poll: { with: { options: true } },
               replyTarget: { with: { account: true } },
               quoteTarget: {
                 with: {
                   account: true,
                   media: true,
-                  poll: { with: { options: true } },
                   replyTarget: { with: { account: true } },
                   reactions: true,
                 },
@@ -94,7 +85,6 @@ profilePost.get<"/:handle{@[^/]+}/:id{[-a-f0-9]+}">(async (c) => {
             with: {
               account: true,
               media: true,
-              poll: { with: { options: true } },
               replyTarget: { with: { account: true } },
               reactions: true,
             },
@@ -113,67 +103,59 @@ interface PostPageProps {
   readonly post: Post & {
     account: Account;
     media: Medium[];
-    poll: (Poll & { options: PollOption[] }) | null;
     sharing:
+    | (Post & {
+      account: Account;
+      media: Medium[];
+      replyTarget: (Post & { account: Account }) | null;
+      quoteTarget:
       | (Post & {
-          account: Account;
-          media: Medium[];
-          poll: (Poll & { options: PollOption[] }) | null;
-          replyTarget: (Post & { account: Account }) | null;
-          quoteTarget:
-            | (Post & {
-                account: Account;
-                media: Medium[];
-                poll: (Poll & { options: PollOption[] }) | null;
-                replyTarget: (Post & { account: Account }) | null;
-                reactions: Reaction[];
-              })
-            | null;
-          reactions: Reaction[];
-        })
+        account: Account;
+        media: Medium[];
+        replyTarget: (Post & { account: Account }) | null;
+        reactions: Reaction[];
+      })
       | null;
+      reactions: Reaction[];
+    })
+    | null;
     replyTarget: (Post & { account: Account }) | null;
     quoteTarget:
-      | (Post & {
-          account: Account;
-          media: Medium[];
-          poll: (Poll & { options: PollOption[] }) | null;
-          replyTarget: (Post & { account: Account }) | null;
-          reactions: Reaction[];
-        })
-      | null;
+    | (Post & {
+      account: Account;
+      media: Medium[];
+      replyTarget: (Post & { account: Account }) | null;
+      reactions: Reaction[];
+    })
+    | null;
     replies: (Post & {
       account: Account;
       media: Medium[];
-      poll: (Poll & { options: PollOption[] }) | null;
       sharing:
+      | (Post & {
+        account: Account;
+        media: Medium[];
+        replyTarget: (Post & { account: Account }) | null;
+        quoteTarget:
         | (Post & {
-            account: Account;
-            media: Medium[];
-            poll: (Poll & { options: PollOption[] }) | null;
-            replyTarget: (Post & { account: Account }) | null;
-            quoteTarget:
-              | (Post & {
-                  account: Account;
-                  media: Medium[];
-                  poll: (Poll & { options: PollOption[] }) | null;
-                  replyTarget: (Post & { account: Account }) | null;
-                  reactions: Reaction[];
-                })
-              | null;
-            reactions: Reaction[];
-          })
+          account: Account;
+          media: Medium[];
+          replyTarget: (Post & { account: Account }) | null;
+          reactions: Reaction[];
+        })
         | null;
+        reactions: Reaction[];
+      })
+      | null;
       replyTarget: (Post & { account: Account }) | null;
       quoteTarget:
-        | (Post & {
-            account: Account;
-            media: Medium[];
-            poll: (Poll & { options: PollOption[] }) | null;
-            replyTarget: (Post & { account: Account }) | null;
-            reactions: Reaction[];
-          })
-        | null;
+      | (Post & {
+        account: Account;
+        media: Medium[];
+        replyTarget: (Post & { account: Account }) | null;
+        reactions: Reaction[];
+      })
+      | null;
       reactions: Reaction[];
     })[];
     reactions: Reaction[];

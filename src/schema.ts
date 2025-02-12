@@ -328,7 +328,6 @@ export const accessTokenRelations = relations(accessTokens, ({ one }) => ({
 export const postTypeEnum = pgEnum("post_type", [
   "Article",
   "Note",
-  "Question",
 ]);
 
 export type PostType = (typeof postTypeEnum.enumValues)[number];
@@ -359,9 +358,6 @@ export const posts = pgTable(
     summary: text("summary"),
     contentHtml: text("content_html"),
     content: text("content"),
-    pollId: uuid("poll_id")
-      .$type<Uuid>()
-      .references(() => polls.id, { onDelete: "set null" }),
     language: text("language"),
     tags: jsonb("tags").notNull().default({}).$type<Record<string, string>>(),
     emojis: jsonb("emojis")
@@ -382,7 +378,6 @@ export const posts = pgTable(
   },
   (table) => [
     unique("posts_id_actor_id_unique").on(table.id, table.accountId),
-    unique().on(table.pollId),
     unique().on(table.accountId, table.sharingId),
     index().on(table.sharingId),
     index().on(table.accountId),
@@ -431,10 +426,6 @@ export const postRelations = relations(posts, ({ one, many }) => ({
   }),
   quotes: many(posts, { relationName: "quote" }),
   media: many(media),
-  poll: one(polls, {
-    fields: [posts.pollId],
-    references: [polls.id],
-  }),
   mentions: many(mentions),
   bookmarks: many(bookmarks),
   pin: one(pinnedPosts, {
@@ -476,101 +467,6 @@ export const mediumRelations = relations(media, ({ one }) => ({
   }),
 }));
 
-export const polls = pgTable("polls", {
-  id: uuid("id").$type<Uuid>().primaryKey(),
-  multiple: boolean("multiple").notNull().default(false),
-  votersCount: bigint("voters_count", { mode: "number" }).notNull().default(0),
-  expires: timestamp("expires", { withTimezone: true }).notNull(),
-  created: timestamp("created", { withTimezone: true })
-    .notNull()
-    .default(currentTimestamp),
-});
-
-export type Poll = typeof polls.$inferSelect;
-export type NewPoll = typeof polls.$inferInsert;
-
-export const pollRelations = relations(polls, ({ one, many }) => ({
-  post: one(posts, {
-    fields: [polls.id],
-    references: [posts.pollId],
-  }),
-  options: many(pollOptions),
-  votes: many(pollVotes),
-}));
-
-export const pollOptions = pgTable(
-  "poll_options",
-  {
-    pollId: uuid("poll_id")
-      .$type<Uuid>()
-      .references(() => polls.id, { onDelete: "cascade" }),
-    index: integer("index").notNull(),
-    title: text("title").notNull(),
-    votesCount: bigint("votes_count", { mode: "number" }).notNull().default(0),
-  },
-  (table) => [
-    primaryKey({ columns: [table.pollId, table.index] }),
-    unique().on(table.pollId, table.title),
-    index().on(table.pollId, table.index),
-  ],
-);
-
-export type PollOption = typeof pollOptions.$inferSelect;
-export type NewPollOption = typeof pollOptions.$inferInsert;
-
-export const pollOptionRelations = relations(pollOptions, ({ one, many }) => ({
-  poll: one(polls, {
-    fields: [pollOptions.pollId],
-    references: [polls.id],
-  }),
-  votes: many(pollVotes),
-}));
-
-export const pollVotes = pgTable(
-  "poll_votes",
-  {
-    pollId: uuid("poll_id")
-      .$type<Uuid>()
-      .notNull()
-      .references(() => polls.id, { onDelete: "cascade" }),
-    optionIndex: integer("option_index").notNull(),
-    accountId: uuid("account_id")
-      .$type<Uuid>()
-      .notNull()
-      .references(() => accounts.id, { onDelete: "cascade" }),
-    created: timestamp("created", { withTimezone: true })
-      .notNull()
-      .default(currentTimestamp),
-  },
-  (table) => [
-    primaryKey({
-      columns: [table.pollId, table.optionIndex, table.accountId],
-    }),
-    foreignKey({
-      columns: [table.pollId, table.optionIndex],
-      foreignColumns: [pollOptions.pollId, pollOptions.index],
-    }),
-    index().on(table.pollId, table.accountId),
-  ],
-);
-
-export type PollVote = typeof pollVotes.$inferSelect;
-export type NewPollVote = typeof pollVotes.$inferInsert;
-
-export const pollVoteRelations = relations(pollVotes, ({ one }) => ({
-  poll: one(polls, {
-    fields: [pollVotes.pollId],
-    references: [polls.id],
-  }),
-  option: one(pollOptions, {
-    fields: [pollVotes.pollId, pollVotes.optionIndex],
-    references: [pollOptions.pollId, pollOptions.index],
-  }),
-  account: one(accounts, {
-    fields: [pollVotes.accountId],
-    references: [accounts.id],
-  }),
-}));
 
 export const mentions = pgTable(
   "mentions",

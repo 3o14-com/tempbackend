@@ -32,9 +32,7 @@ import {
   and,
   count,
   eq,
-  gte,
   inArray,
-  isNotNull,
   sql,
 } from "drizzle-orm";
 import type { PgDatabase } from "drizzle-orm/pg-core";
@@ -51,17 +49,11 @@ import {
   type Mention,
   type NewMedium,
   type NewPost,
-  type Poll,
-  type PollOption,
-  type PollVote,
   type Post,
   accountOwners,
   likes,
   media,
   mentions,
-  pollOptions,
-  pollVotes,
-  polls,
   posts,
 } from "../schema";
 import type * as schema from "../schema";
@@ -81,7 +73,6 @@ export function isPost(object?: vocab.Object | Link | null): object is ASPost {
   return (
     object instanceof Article ||
     object instanceof Note ||
-    object instanceof Question ||
     object instanceof ChatMessage
   );
 }
@@ -236,11 +227,9 @@ export async function persistPost(
   const updated = toDate(object.updated) ?? published ?? new Date();
   const values = {
     type:
-      object instanceof Question
-        ? "Question"
-        : object instanceof Article
-          ? "Article"
-          : "Note",
+      object instanceof Article
+        ? "Article"
+        : "Note",
     accountId: account.id,
     applicationId: null,
     replyTargetId,
@@ -288,82 +277,6 @@ export async function persistPost(
     where: eq(posts.iri, object.id.href),
   });
   if (post == null) return null;
-  if (object instanceof Question) {
-    const options: [string, number][] = [];
-    let multiple = false;
-    for await (const option of object.getExclusiveOptions()) {
-      if (option instanceof Note && option.name != null) {
-        const replies = await option.getReplies();
-        options.push([option.name.toString(), replies?.totalItems ?? 0]);
-      }
-    }
-    if (options.length < 1) {
-      for await (const option of object.getInclusiveOptions()) {
-        if (option instanceof Note && option.name != null) {
-          const replies = await option.getReplies();
-          options.push([option.name.toString(), replies?.totalItems ?? 0]);
-        }
-        multiple = true;
-      }
-    }
-    if (options.length > 0 && object.endTime != null) {
-      if (post.pollId == null) {
-        const [poll] = await db
-          .insert(polls)
-          .values({
-            id: uuidv7(),
-            multiple,
-            votersCount: object.voters ?? 0,
-            expires: toDate(object.endTime),
-          })
-          .returning();
-        await db.insert(pollOptions).values(
-          options.map(([title, votesCount], index) => ({
-            pollId: poll.id,
-            index,
-            title,
-            votesCount,
-          })),
-        );
-        await db
-          .update(posts)
-          .set({ pollId: poll.id })
-          .where(eq(posts.id, post.id));
-      } else {
-        const [poll] = await db
-          .update(polls)
-          .set({
-            multiple,
-            votersCount: object.voters ?? 0,
-            expires: toDate(object.endTime),
-          })
-          .where(eq(polls.id, post.pollId))
-          .returning();
-        for (let index = 0; index < options.length; index++) {
-          const [title, votesCount] = options[index];
-          await db
-            .insert(pollOptions)
-            .values({ pollId: poll.id, index, title, votesCount })
-            .onConflictDoUpdate({
-              target: [pollOptions.pollId, pollOptions.index],
-              set: { title, votesCount },
-              setWhere: and(
-                eq(pollOptions.pollId, poll.id),
-                eq(pollOptions.index, index),
-              ),
-            });
-        }
-        await db
-          .delete(pollOptions)
-          .where(
-            and(
-              eq(pollOptions.pollId, post.pollId),
-              gte(pollOptions.index, options.length),
-            ),
-          );
-      }
-    }
-  }
   const mentionRows: Mention[] = [];
   await db.delete(mentions).where(eq(mentions.postId, post.id));
   for await (const tag of object.getTags(options)) {
@@ -555,106 +468,6 @@ export async function persistSharingPost(
     : { ...result[0], account, sharing: originalPost };
 }
 
-export async function persistPollVote(
-  db: PgDatabase<
-    PostgresJsQueryResultHKT,
-    typeof schema,
-    ExtractTablesWithRelations<typeof schema>
-  >,
-  object: Note,
-  baseUrl: URL | string,
-  options: {
-    contextLoader?: DocumentLoader;
-    documentLoader?: DocumentLoader;
-    account?: Account;
-  } = {},
-): Promise<PollVote | null> {
-  if (
-    object.replyTargetId == null ||
-    object.attributionId == null ||
-    object.name == null
-  ) {
-    return null;
-  }
-  const post = await db.query.posts.findFirst({
-    with: {
-      poll: { with: { options: { orderBy: pollOptions.index } } },
-    },
-    where: and(
-      eq(posts.iri, object.replyTargetId.href),
-      eq(posts.type, "Question"),
-      isNotNull(posts.pollId),
-    ),
-  });
-  if (post == null) return null;
-  const poll = post.poll;
-  if (poll == null) return null;
-  const voter = await persistAccountByIri(
-    db,
-    object.attributionId.href,
-    baseUrl,
-    options,
-  );
-  if (voter == null) return null;
-  if (!poll.multiple) {
-    const deleted = await db
-      .delete(pollVotes)
-      .where(
-        and(eq(pollVotes.accountId, voter.id), eq(pollVotes.pollId, poll.id)),
-      )
-      .returning();
-    for (const vote of deleted) {
-      await db
-        .update(pollOptions)
-        .set({
-          votesCount: sql`${pollOptions.votesCount} - 1`,
-        })
-        .where(
-          and(
-            eq(pollOptions.pollId, poll.id),
-            eq(pollOptions.index, vote.optionIndex),
-          ),
-        );
-    }
-    if (deleted.length > 0) {
-      await db
-        .update(polls)
-        .set({
-          votersCount: sql`${polls.votersCount} - 1`,
-        })
-        .where(eq(polls.id, poll.id));
-    }
-  }
-  const optionTitle = object.name.toString();
-  const optionIndex = poll.options.findIndex((o) => o.title === optionTitle);
-  const votes = await db
-    .insert(pollVotes)
-    .values({
-      accountId: voter.id,
-      pollId: poll.id,
-      optionIndex,
-    })
-    .returning();
-  if (votes.length < 1) return null;
-  await db
-    .update(pollOptions)
-    .set({
-      votesCount: sql`${pollOptions.votesCount} + 1`,
-    })
-    .where(
-      and(
-        eq(pollOptions.pollId, poll.id),
-        eq(pollOptions.index, votes[0].optionIndex),
-      ),
-    );
-  await db
-    .update(polls)
-    .set({
-      votersCount: sql`${polls.votersCount} + 1`,
-    })
-    .where(eq(polls.id, poll.id));
-  return votes[0];
-}
 
 export async function updatePostStats(
   db: PgDatabase<
@@ -700,30 +513,15 @@ export function toObject(
     replyTarget: Post | null;
     quoteTarget: Post | null;
     media: Medium[];
-    poll: (Poll & { options: PollOption[] }) | null;
     mentions: (Mention & { account: Account })[];
     replies: Post[];
   },
   ctx: Context<unknown>,
 ): ASPost {
   const cls =
-    post.type === "Question"
-      ? Question
-      : post.type === "Article"
-        ? Article
-        : Note;
-  const options =
-    post.poll == null
-      ? []
-      : post.poll.options
-        .toSorted((a, b) => (a.index < b.index ? -1 : 1))
-        .map(
-          (o) =>
-            new Note({
-              name: o.title,
-              replies: new Collection({ totalItems: o.votesCount }),
-            }),
-        );
+    post.type === "Article"
+      ? Article
+      : Note;
   return new cls({
     id: new URL(post.iri),
     attribution: new URL(post.account.iri),
@@ -842,14 +640,6 @@ export function toObject(
           ? null
           : post.updated,
     ),
-    exclusiveOptions: post.poll == null || post.poll.multiple ? [] : options,
-    inclusiveOptions: post.poll == null || !post.poll.multiple ? [] : options,
-    voters: post.poll == null ? null : post.poll.votersCount,
-    endTime: post.poll == null ? null : toTemporalInstant(post.poll.expires),
-    closed:
-      post.poll == null || post.poll.expires > new Date()
-        ? null
-        : toTemporalInstant(post.poll.expires),
   });
 }
 
@@ -859,7 +649,6 @@ export function toCreate(
     replyTarget: Post | null;
     quoteTarget: Post | null;
     media: Medium[];
-    poll: (Poll & { options: PollOption[] }) | null;
     mentions: (Mention & { account: Account })[];
     replies: Post[];
   },
@@ -882,7 +671,6 @@ export function toUpdate(
     replyTarget: Post | null;
     quoteTarget: Post | null;
     media: Medium[];
-    poll: (Poll & { options: PollOption[] }) | null;
     mentions: (Mention & { account: Account })[];
     replies: Post[];
   },
@@ -909,7 +697,6 @@ export function toDelete(
     replyTarget: Post | null;
     quoteTarget: Post | null;
     media: Medium[];
-    poll: (Poll & { options: PollOption[] }) | null;
     mentions: (Mention & { account: Account })[];
     replies: Post[];
   },
