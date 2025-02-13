@@ -1,7 +1,6 @@
 import xss from "xss";
-import type { Account, AccountOwner, Follow, Mute } from "../schema";
+import type { Account, AccountOwner, Follow } from "../schema";
 import type { Uuid } from "../uuid";
-import { serializeEmojis } from "./emoji";
 
 export function serializeAccount(
   account: Account & { successor: Account | null },
@@ -44,7 +43,6 @@ export function serializeAccount(
         ? null
         : serializeAccount({ ...account.successor, successor: null }, baseUrl),
     last_status_at: null,
-    emojis: serializeEmojis(account.emojis),
     fields: Object.entries(account.fieldHtmls).map(([name, value]) => ({
       name,
       value,
@@ -81,7 +79,6 @@ export function serializeRelationship(
   account: Account & {
     followers: Follow[];
     following: Follow[];
-    mutedBy: Mute[];
   },
   currentAccountOwner: { id: Uuid },
 ): Record<string, unknown> {
@@ -91,14 +88,6 @@ export function serializeRelationship(
   const followedBy = account.following.find(
     (f) => f.followingId === currentAccountOwner.id,
   );
-  const now = Date.now();
-  const muting = account.mutedBy.find((m) => {
-    if (m.accountId !== currentAccountOwner.id) return false;
-    if (m.duration == null) return true;
-    let d = +new Date(`1970-01-01T${m.duration.replace(/^-/, "")}Z`);
-    if (m.duration.startsWith("-")) d = -d;
-    return d <= 0 || now < m.created.getTime() + d;
-  });
   return {
     id: account.id,
     following: following?.approved != null,
@@ -106,8 +95,6 @@ export function serializeRelationship(
     notifying: following?.notify === true,
     languages: following == null ? null : following.languages,
     followed_by: followedBy?.approved != null,
-    muting: muting != null,
-    muting_notifications: muting?.notifications === true,
     requested: following != null && following.approved == null,
     requested_by: followedBy != null && followedBy.approved == null,
     domain_blocking: false, // TODO

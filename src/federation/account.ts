@@ -29,7 +29,7 @@ import {
 import type { PgDatabase } from "drizzle-orm/pg-core";
 import type { PostgresJsQueryResultHKT } from "drizzle-orm/postgres-js";
 import * as schema from "../schema";
-import type { NewPinnedPost, Post } from "../schema";
+import type { Post } from "../schema";
 import { type Uuid, uuidv7 } from "../uuid";
 import { iterateCollection } from "./collection";
 import { toDate } from "./date";
@@ -159,7 +159,6 @@ export async function persistAccount(
     aliases: actor?.aliasIds?.map((alias) => alias.href) ?? [],
     instanceHost: actor.id.host,
     fieldHtmls,
-    emojis,
     published: toDate(actor.published),
   };
   await db
@@ -196,15 +195,6 @@ export async function persistAccount(
       });
       if (post == null) continue;
       posts.unshift(post);
-    }
-    for (const post of posts) {
-      await db
-        .insert(schema.pinnedPosts)
-        .values({
-          postId: post.id,
-          accountId: post.accountId,
-        } satisfies NewPinnedPost)
-        .onConflictDoNothing();
     }
   }
   return account;

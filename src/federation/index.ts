@@ -1,16 +1,13 @@
 import {
   Accept,
   Activity,
-  Add,
   Announce,
   Create,
   Delete,
-  EmojiReact,
   Follow,
   Like,
   Move,
   Reject,
-  Remove,
   Undo,
   Update,
   isActor,
@@ -24,17 +21,13 @@ import {
   onAccountDeleted,
   onAccountMoved,
   onAccountUpdated,
-  onEmojiReactionAdded,
-  onEmojiReactionRemoved,
   onFollowAccepted,
   onFollowRejected,
   onFollowed,
   onLiked,
   onPostCreated,
   onPostDeleted,
-  onPostPinned,
   onPostShared,
-  onPostUnpinned,
   onPostUnshared,
   onPostUpdated,
   onUnfollowed,
@@ -64,7 +57,6 @@ federation
     }
   })
   .on(Like, onLiked)
-  .on(EmojiReact, onEmojiReactionAdded)
   .on(Announce, async (ctx, announce) => {
     const object = await announce.getObject();
     if (isPost(object)) {
@@ -93,8 +85,6 @@ federation
       await onPostDeleted(ctx, del);
     }
   })
-  .on(Add, onPostPinned)
-  .on(Remove, onPostUnpinned)
   .on(Move, onAccountMoved)
   .on(Undo, async (ctx, undo) => {
     const object = await undo.getObject();
@@ -108,8 +98,6 @@ federation
       await onUnfollowed(ctx, undo);
     } else if (object instanceof Like) {
       await onUnliked(ctx, undo);
-    } else if (object instanceof EmojiReact) {
-      await onEmojiReactionRemoved(ctx, undo);
     } else if (object instanceof Announce) {
       await onPostUnshared(ctx, undo);
     } else {

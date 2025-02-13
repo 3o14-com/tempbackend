@@ -29,7 +29,6 @@ import {
   listPosts,
   lists,
   mentions,
-  mutes,
   posts,
   timelinePosts,
 } from "../../schema";
@@ -89,47 +88,9 @@ app.get(
             db.select({ id: accountOwners.id }).from(accountOwners),
           )
           : undefined,
-        // Hide the posts from the muted accounts:
-        notInArray(
-          posts.accountId,
-          db
-            .select({ accountId: mutes.mutedAccountId })
-            .from(mutes)
-            .where(
-              and(
-                eq(mutes.accountId, owner.id),
-                or(
-                  isNull(mutes.duration),
-                  gt(
-                    sql`${mutes.created} + ${mutes.duration}`,
-                    sql`CURRENT_TIMESTAMP`,
-                  ),
-                ),
-              ),
-            ),
-        ),
         // Hide the shared posts from the muted accounts:
         or(
           isNull(posts.sharingId),
-          notInArray(
-            posts.sharingId,
-            db
-              .select({ id: posts.id })
-              .from(posts)
-              .innerJoin(mutes, eq(mutes.mutedAccountId, posts.accountId))
-              .where(
-                and(
-                  eq(mutes.accountId, owner.id),
-                  or(
-                    isNull(mutes.duration),
-                    gt(
-                      sql`${mutes.created} + ${mutes.duration}`,
-                      sql`CURRENT_TIMESTAMP`,
-                    ),
-                  ),
-                ),
-              ),
-          ),
         ),
         query.max_id == null ? undefined : lt(posts.id, query.max_id),
         query.min_id == null ? undefined : gt(posts.id, query.min_id),
@@ -257,47 +218,8 @@ app.get(
                 ),
             ),
           ),
-          // Hide the posts from the muted accounts:
-          notInArray(
-            posts.accountId,
-            db
-              .select({ accountId: mutes.mutedAccountId })
-              .from(mutes)
-              .where(
-                and(
-                  eq(mutes.accountId, owner.id),
-                  or(
-                    isNull(mutes.duration),
-                    gt(
-                      sql`${mutes.created} + ${mutes.duration}`,
-                      sql`CURRENT_TIMESTAMP`,
-                    ),
-                  ),
-                ),
-              ),
-          ),
-          // Hide the shared posts from the muted accounts:
           or(
             isNull(posts.sharingId),
-            notInArray(
-              posts.sharingId,
-              db
-                .select({ id: posts.id })
-                .from(posts)
-                .innerJoin(mutes, eq(mutes.mutedAccountId, posts.accountId))
-                .where(
-                  and(
-                    eq(mutes.accountId, owner.id),
-                    or(
-                      isNull(mutes.duration),
-                      gt(
-                        sql`${mutes.created} + ${mutes.duration}`,
-                        sql`CURRENT_TIMESTAMP`,
-                      ),
-                    ),
-                  ),
-                ),
-            ),
           ),
           query.max_id == null ? undefined : lt(posts.id, query.max_id),
           query.min_id == null ? undefined : gt(posts.id, query.min_id),
@@ -408,46 +330,8 @@ app.get(
               ),
           ),
           // Hide the posts from the muted accounts:
-          notInArray(
-            posts.accountId,
-            db
-              .select({ accountId: mutes.mutedAccountId })
-              .from(mutes)
-              .where(
-                and(
-                  eq(mutes.accountId, owner.id),
-                  or(
-                    isNull(mutes.duration),
-                    gt(
-                      sql`${mutes.created} + ${mutes.duration}`,
-                      sql`CURRENT_TIMESTAMP`,
-                    ),
-                  ),
-                ),
-              ),
-          ),
-          // Hide the shared posts from the muted accounts:
           or(
             isNull(posts.sharingId),
-            notInArray(
-              posts.sharingId,
-              db
-                .select({ id: posts.id })
-                .from(posts)
-                .innerJoin(mutes, eq(mutes.mutedAccountId, posts.accountId))
-                .where(
-                  and(
-                    eq(mutes.accountId, owner.id),
-                    or(
-                      isNull(mutes.duration),
-                      gt(
-                        sql`${mutes.created} + ${mutes.duration}`,
-                        sql`CURRENT_TIMESTAMP`,
-                      ),
-                    ),
-                  ),
-                ),
-            ),
           ),
           query.max_id == null ? undefined : lt(posts.id, query.max_id),
           query.min_id == null ? undefined : gt(posts.id, query.min_id),
@@ -522,25 +406,6 @@ app.get(
             db.select({ id: accountOwners.id }).from(accountOwners),
           )
           : undefined,
-        // Hide the posts from the muted accounts:
-        notInArray(
-          posts.accountId,
-          db
-            .select({ accountId: mutes.mutedAccountId })
-            .from(mutes)
-            .where(
-              and(
-                eq(mutes.accountId, owner.id),
-                or(
-                  isNull(mutes.duration),
-                  gt(
-                    sql`${mutes.created} + ${mutes.duration}`,
-                    sql`CURRENT_TIMESTAMP`,
-                  ),
-                ),
-              ),
-            ),
-        ),
         query.max_id == null ? undefined : lt(posts.id, query.max_id),
         query.min_id == null ? undefined : gt(posts.id, query.min_id),
       ),

@@ -8,8 +8,6 @@ import {
   Delete,
   Document,
   type DocumentLoader,
-  Emoji,
-  Hashtag,
   Image,
   LanguageString,
   Link,
@@ -62,7 +60,6 @@ import { type Uuid, uuidv7 } from "../uuid";
 import { persistAccount, persistAccountByIri } from "./account";
 import { iterateCollection } from "./collection";
 import { toDate, toTemporalInstant } from "./date";
-import { toEmoji } from "./emoji";
 import { appendPostToTimelines } from "./timeline";
 
 const logger = getLogger(["3o14", "federation", "post"]);
@@ -155,33 +152,7 @@ export async function persistPost(
       }
     }
   }
-  const tags: Record<string, string> = {};
-  const emojis: Record<string, string> = {};
   let objectLink: URL | null = null; // FEP-e232
-  for await (const tag of object.getTags(options)) {
-    if (tag instanceof Hashtag && tag.name != null && tag.href != null) {
-      tags[tag.name.toString()] = tag.href.href;
-    } else if (tag instanceof Emoji && tag.name != null) {
-      const icon = await tag.getIcon();
-      if (icon?.url == null) continue;
-      let href: string;
-      if (icon.url instanceof Link) {
-        if (icon.url.href == null) continue;
-        href = icon.url.href.href;
-      } else href = icon.url.href;
-      emojis[tag.name.toString()] = href;
-    } else if (
-      objectLink == null &&
-      tag instanceof Link &&
-      (tag.mediaType === "application/activity+json" ||
-        tag.mediaType?.match(
-          /^application\/ld\+json\s*;\s*profile="https:\/\/www\.w3\.org\/ns\/activitystreams"/,
-        )) &&
-      tag.href != null
-    ) {
-      objectLink = tag.href;
-    }
-  }
   let quoteTargetId: Uuid | null = null;
   if (objectLink == null && object.quoteUrl != null) {
     objectLink = object.quoteUrl;
@@ -251,8 +222,6 @@ export async function persistPost(
           ? object.summary.language.compact()
           : null,
     previewCard,
-    tags,
-    emojis,
     sensitive: object.sensitive ?? false,
     url: object.url instanceof Link ? object.url.href?.href : object.url?.href,
     repliesCount: replies?.totalItems ?? 0,
@@ -564,16 +533,6 @@ export function toObject(
             href: new URL(m.account.iri),
             name: m.account.handle,
           }),
-      ),
-      ...Object.entries(post.tags).map(
-        ([name, url]) =>
-          new Hashtag({
-            name,
-            href: new URL(url),
-          }),
-      ),
-      ...Object.entries(post.emojis).map(([shortcode, url]) =>
-        toEmoji(ctx, { shortcode, url }),
       ),
       ...(post.quoteTarget == null
         ? []

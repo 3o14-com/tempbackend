@@ -1,5 +1,4 @@
 import {
-  type Actor,
   Delete,
   Move,
   type Object,
@@ -32,23 +31,19 @@ import {
   followAccount,
   persistAccount,
 } from "../federation/account.ts";
-import { isPost, persistPost } from "../federation/post.ts";
 import { loginRequired } from "../login.ts";
 import {
   type Account,
   type AccountOwner,
-  type Post,
   type PostVisibility,
   accountOwners,
   accounts as accountsTable,
-  bookmarks,
   follows,
   instances,
   listMembers,
   lists,
-  mutes,
 } from "../schema.ts";
-import { extractCustomEmojis, formatText } from "../text.ts";
+import { formatText } from "../text.ts";
 import { type Uuid, isUuid } from "../uuid.ts";
 
 
@@ -107,8 +102,6 @@ accounts.post("/", async (c) => {
   }
   const fedCtx = federation.createContext(c.req.raw, undefined);
   const bioResult = await formatText(db, bio ?? "", fedCtx);
-  const nameEmojis = await extractCustomEmojis(db, name);
-  const emojis = { ...nameEmojis, ...bioResult.emojis };
   await db.transaction(async (tx) => {
     await tx
       .insert(instances)
@@ -126,7 +119,6 @@ accounts.post("/", async (c) => {
         instanceHost: fedCtx.host,
         type: "Person",
         name,
-        emojis,
         handle: `@${username}@${fedCtx.host}`,
         bioHtml: bioResult.html,
         url: fedCtx.getActorUri(username).href,
@@ -286,14 +278,11 @@ accounts.post("/:id", async (c) => {
     }),
   };
   const bioResult = await formatText(db, bio ?? "", fmtOpts);
-  const nameEmojis = await extractCustomEmojis(db, name);
-  const emojis = { ...nameEmojis, ...bioResult.emojis };
   await db.transaction(async (tx) => {
     await tx
       .update(accountsTable)
       .set({
         name,
-        emojis,
         bioHtml: bioResult.html,
         protected: protected_,
       })
@@ -394,14 +383,6 @@ accounts.get("/:id/migrate", async (c) => {
     .from(listMembers)
     .innerJoin(lists, eq(listMembers.listId, lists.id))
     .where(eq(lists.accountOwnerId, accountOwner.id));
-  const [{ mutesCount }] = await db
-    .select({ mutesCount: count() })
-    .from(mutes)
-    .where(eq(mutes.accountId, accountOwner.id));
-  const [{ bookmarksCount }] = await db
-    .select({ bookmarksCount: count() })
-    .from(bookmarks)
-    .where(eq(bookmarks.accountOwnerId, accountOwner.id));
   const aliasesError = c.req.query("error");
   const aliasesHandle = c.req.query("handle");
   const importDataResult = c.req.query("import-data-result");
@@ -538,20 +519,6 @@ accounts.get("/:id/migrate", async (c) => {
               <td>{listsCount.toLocaleString("en-US")}</td>
               <td>
                 <a href="migrate/lists.csv">CSV</a>
-              </td>
-            </tr>
-            <tr>
-              <td>You mute</td>
-              <td>{mutesCount.toLocaleString("en-US")}</td>
-              <td>
-                <a href="migrate/muted_accounts.csv">CSV</a>
-              </td>
-            </tr>
-            <tr>
-              <td>Bookmarks</td>
-              <td>{bookmarksCount.toLocaleString("en-US")}</td>
-              <td>
-                <a href="migrate/bookmarks.csv">CSV</a>
               </td>
             </tr>
           </tbody>
@@ -780,63 +747,6 @@ accounts.get("/:id/migrate/lists.csv", async (c) => {
   });
 });
 
-accounts.get("/:id/migrate/muted_accounts.csv", async (c) => {
-  const accountId = c.req.param("id");
-  if (!isUuid(accountId)) return c.notFound();
-  const accountOwner = await db.query.accountOwners.findFirst({
-    where: eq(accountOwners.id, accountId),
-    with: { account: true },
-  });
-  if (accountOwner == null) return c.notFound();
-  const csv = createObjectCsvStringifier({
-    header: [
-      { id: "handle", title: "Account address" },
-      { id: "notifications", title: "Hide notifications" },
-    ],
-  });
-  c.header("Content-Type", "text/csv");
-  c.header("Content-Disposition", 'attachment; filename="muted_accounts.csv"');
-  return streamText(c, async (stream) => {
-    await stream.write(csv.getHeaderString() ?? "");
-    const mutedAccounts = await db.query.mutes.findMany({
-      with: { targetAccount: true },
-      where: eq(mutes.accountId, accountOwner.id),
-    });
-    for (const muted of mutedAccounts) {
-      const record = {
-        handle: muted.targetAccount.handle.replace(/^@/, ""),
-        notifications: muted.notifications ? "true" : "false",
-      };
-      await stream.write(csv.stringifyRecords([record]));
-    }
-  });
-});
-
-
-accounts.get("/:id/migrate/bookmarks.csv", async (c) => {
-  const accountId = c.req.param("id");
-  if (!isUuid(accountId)) return c.notFound();
-  const accountOwner = await db.query.accountOwners.findFirst({
-    where: eq(accountOwners.id, accountId),
-    with: { account: true },
-  });
-  if (accountOwner == null) return c.notFound();
-  const csv = createObjectCsvStringifier({
-    header: [{ id: "iri", title: "iri" }],
-  });
-  c.header("Content-Type", "text/csv");
-  c.header("Content-Disposition", 'attachment; filename="bookmarks.csv"');
-  return streamText(c, async (stream) => {
-    const bookmarkList = await db.query.bookmarks.findMany({
-      with: { post: true },
-      where: eq(bookmarks.accountOwnerId, accountOwner.id),
-    });
-    for (const bookmark of bookmarkList) {
-      const record = { iri: bookmark.post.iri };
-      await stream.write(csv.stringifyRecords([record]));
-    }
-  });
-});
 
 accounts.post("/:id/migrate/import", async (c) => {
   const accountId = c.req.param("id");
@@ -1027,85 +937,6 @@ accounts.post("/:id/migrate/import", async (c) => {
       }
     });
     message = `Imported ${imported} list members out of ${csv.length} entries.`;
-  } else if (category === "muted_accounts") {
-    const accounts = csv
-      .map((row) => row["Account address"].trim())
-      .filter((addr) => addr != null);
-    const notifications = globalThis.Object.fromEntries(
-      csv.map(
-        (row) =>
-          [
-            row["Account address"].trim(),
-            row["Hide notifications"].toLowerCase().trim() === "true",
-          ] as const,
-      ),
-    );
-    const { results } = await PromisePool.for(accounts).process(
-      async (handle) =>
-        [
-          handle,
-          await fedCtx.lookupObject(handle, { documentLoader }),
-        ] as const,
-    );
-    const actors: Record<string, [Actor, boolean]> = {};
-    for (const [handle, actor] of results) {
-      if (isActor(actor)) actors[handle] = [actor, notifications[handle]];
-    }
-    let imported = 0;
-    await db.transaction(async (tx) => {
-      for (const handle in actors) {
-        const [actor, notifications] = actors[handle];
-        let target: Account | null;
-        try {
-          target = await persistAccount(tx, actor, c.req.url, fedCtx);
-        } catch (error) {
-          logger.error("Failed to persist account: {error}", { error });
-          continue;
-        }
-        if (target == null) continue;
-        await tx
-          .insert(mutes)
-          .values({
-            id: crypto.randomUUID(),
-            accountId: accountOwner.id,
-            mutedAccountId: target.id,
-            notifications,
-          })
-          .onConflictDoNothing();
-        imported++;
-      }
-    });
-    message = `Imported ${imported} muted accounts out of ${csv.length} entries.`;
-  } else if (category === "bookmarks") {
-    const iris = csv.map((row) => row[0].trim()).filter((iri) => iri != null);
-    const { results } = await PromisePool.for(iris).process(async (iri) => {
-      try {
-        return await fedCtx.lookupObject(iri, { documentLoader });
-      } catch (error) {
-        logger.error("Failed to lookup object: {error}", { error });
-        return null;
-      }
-    });
-    let imported = 0;
-    await db.transaction(async (tx) => {
-      for (const obj of results) {
-        if (!isPost(obj)) continue;
-        let post: Post | null;
-        try {
-          post = await persistPost(tx, obj, c.req.url, fedCtx);
-        } catch (error) {
-          logger.error("Failed to persist post: {error}", { error });
-          continue;
-        }
-        if (post == null) continue;
-        await tx
-          .insert(bookmarks)
-          .values({ postId: post.id, accountOwnerId: accountOwner.id })
-          .onConflictDoNothing();
-        imported++;
-      }
-    });
-    message = `Imported ${imported} bookmarks out of ${csv.length} entries.`;
   } else {
     return new Response("Invalid category", { status: 400 });
   }

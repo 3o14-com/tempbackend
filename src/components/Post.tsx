@@ -2,9 +2,7 @@ import type {
   Account,
   Medium as DbMedium,
   Post as DbPost,
-  Reaction,
 } from "../schema";
-import { renderCustomEmojis } from "../text";
 
 export interface PostProps {
   readonly post: DbPost & {
@@ -20,10 +18,8 @@ export interface PostProps {
         account: Account;
         media: DbMedium[];
         replyTarget: (DbPost & { account: Account }) | null;
-        reactions: Reaction[];
       })
       | null;
-      reactions: Reaction[];
     })
     | null;
     replyTarget: (DbPost & { account: Account }) | null;
@@ -32,20 +28,17 @@ export interface PostProps {
       account: Account;
       media: DbMedium[];
       replyTarget: (DbPost & { account: Account }) | null;
-      reactions: Reaction[];
     })
     | null;
-    reactions: Reaction[];
   };
-  readonly pinned?: boolean;
   readonly quoted?: boolean;
 }
 
-export function Post({ post, pinned, quoted }: PostProps) {
+export function Post({ post, quoted }: PostProps) {
   if (post.sharing != null)
     return <Post post={{ ...post.sharing, sharing: null }} />;
   const account = post.account;
-  const authorNameHtml = renderCustomEmojis(account.name, account.emojis);
+  const authorNameHtml = account.name;
   const authorUrl = account.url ?? account.iri;
   const authorName = (
     // biome-ignore lint/security/noDangerouslySetInnerHtml: xss protected
@@ -54,11 +47,9 @@ export function Post({ post, pinned, quoted }: PostProps) {
   return (
     <article
       style={
-        pinned
-          ? "border: 1px solid silver;"
-          : quoted
-            ? "border: calc(var(--pico-border-width)*4) solid var(--pico-background-color);"
-            : ""
+        quoted
+          ? "border: calc(var(--pico-border-width)*4) solid var(--pico-background-color);"
+          : ""
       }
     >
       <header>
@@ -121,28 +112,6 @@ export function Post({ post, pinned, quoted }: PostProps) {
                 }`}
             </small>
           )}
-          {post.reactions.length > 0 && (
-            <small>
-              {" "}
-              &middot;{" "}
-              {Object.entries(groupByEmojis(post.reactions)).map(
-                ([emoji, { src, count }]) => (
-                  <>
-                    {src == null ? (
-                      <span title={`${emoji} × ${count}`}>{emoji}</span>
-                    ) : (
-                      <img
-                        src={src}
-                        alt={emoji}
-                        title={`${emoji} × ${count}`}
-                        style="vertical-align: text-bottom; height: 22px;"
-                      />
-                    )}{" "}
-                  </>
-                ),
-              )}
-            </small>
-          )}
           {post.sharesCount != null && post.sharesCount > 0 && (
             <small>
               {" "}
@@ -153,28 +122,10 @@ export function Post({ post, pinned, quoted }: PostProps) {
                 }`}
             </small>
           )}
-          {pinned && <small> &middot; Pinned</small>}
         </p>
       </footer>
     </article>
   );
-}
-
-function groupByEmojis(
-  reactions: Reaction[],
-): Record<string, { src?: string; count: number }> {
-  const result: Record<string, { src?: string; count: number }> = {};
-  for (const reaction of reactions) {
-    if (result[reaction.emoji] == null) {
-      result[reaction.emoji] = {
-        src: reaction.customEmoji ?? undefined,
-        count: 1,
-      };
-    } else {
-      result[reaction.emoji].count++;
-    }
-  }
-  return result;
 }
 
 interface PostContentProps {
@@ -185,14 +136,13 @@ interface PostContentProps {
       account: Account;
       media: DbMedium[];
       replyTarget: (DbPost & { account: Account }) | null;
-      reactions: Reaction[];
     })
     | null;
   };
 }
 
 function PostContent({ post }: PostContentProps) {
-  const contentHtml = renderCustomEmojis(post.contentHtml, post.emojis);
+  const contentHtml = post.contentHtml;
   return (
     <>
       {post.contentHtml && (

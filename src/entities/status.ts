@@ -4,20 +4,15 @@ import {
   type Account,
   type AccountOwner,
   type Application,
-  type Bookmark,
   type Like,
   type Medium,
   type Mention,
-  type PinnedPost,
   type Post,
-  type Reaction,
-  bookmarks,
   likes,
   posts,
 } from "../schema";
 import type { Uuid } from "../uuid";
 import { serializeAccount } from "./account";
-import { serializeEmojis, serializeReactions } from "./emoji";
 import { serializeMedium } from "./medium";
 
 export function getPostRelations(ownerId: Uuid) {
@@ -40,10 +35,7 @@ export function getPostRelations(ownerId: Uuid) {
               with: { account: { with: { owner: true, successor: true } } },
             },
             likes: { where: eq(likes.accountId, ownerId) },
-            reactions: { with: { account: { with: { successor: true } } } },
             shares: { where: eq(posts.accountId, ownerId) },
-            bookmarks: { where: eq(bookmarks.accountOwnerId, ownerId) },
-            pin: true,
           },
         },
         media: true,
@@ -51,10 +43,7 @@ export function getPostRelations(ownerId: Uuid) {
           with: { account: { with: { owner: true, successor: true } } },
         },
         likes: { where: eq(likes.accountId, ownerId) },
-        reactions: { with: { account: { with: { successor: true } } } },
         shares: { where: eq(posts.accountId, ownerId) },
-        bookmarks: { where: eq(bookmarks.accountOwnerId, ownerId) },
-        pin: true,
       },
     },
     quoteTarget: {
@@ -67,19 +56,13 @@ export function getPostRelations(ownerId: Uuid) {
           with: { account: { with: { owner: true, successor: true } } },
         },
         likes: { where: eq(likes.accountId, ownerId) },
-        reactions: { with: { account: { with: { successor: true } } } },
         shares: { where: eq(posts.accountId, ownerId) },
-        bookmarks: { where: eq(bookmarks.accountOwnerId, ownerId) },
-        pin: true,
       },
     },
     media: true,
     mentions: { with: { account: { with: { owner: true, successor: true } } } },
     likes: { where: eq(likes.accountId, ownerId) },
-    reactions: { with: { account: { with: { successor: true } } } },
     shares: { where: eq(posts.accountId, ownerId) },
-    bookmarks: { where: eq(bookmarks.accountOwnerId, ownerId) },
-    pin: true,
     replies: true,
   } as const;
 }
@@ -107,12 +90,7 @@ export function serializePost(
           };
         })[];
         likes: Like[];
-        reactions: (Reaction & {
-          account: Account & { successor: Account | null };
-        })[];
         shares: Post[];
-        bookmarks: Bookmark[];
-        pin: PinnedPost | null;
       })
       | null;
       media: Medium[];
@@ -123,12 +101,7 @@ export function serializePost(
         };
       })[];
       likes: Like[];
-      reactions: (Reaction & {
-        account: Account & { successor: Account | null };
-      })[];
       shares: Post[];
-      bookmarks: Bookmark[];
-      pin: PinnedPost | null;
     })
     | null;
     quoteTarget:
@@ -144,12 +117,7 @@ export function serializePost(
         };
       })[];
       likes: Like[];
-      reactions: (Reaction & {
-        account: Account & { successor: Account | null };
-      })[];
       shares: Post[];
-      bookmarks: Bookmark[];
-      pin: PinnedPost | null;
     })
     | null;
     media: Medium[];
@@ -160,12 +128,7 @@ export function serializePost(
       };
     })[];
     likes: Like[];
-    reactions: (Reaction & {
-      account: Account & { successor: Account | null };
-    })[];
     shares: Post[];
-    bookmarks: Bookmark[];
-    pin: PinnedPost | null;
   },
   currentAccountOwner: { id: string },
   baseUrl: URL | string,
@@ -191,11 +154,6 @@ export function serializePost(
     reblogged: post.shares.some(
       (share) => share.accountId === currentAccountOwner.id,
     ),
-    muted: false, // TODO
-    bookmarked: post.bookmarks.some(
-      (bookmark) => bookmark.accountOwnerId === currentAccountOwner.id,
-    ),
-    pinned: post.pin != null && post.pin.accountId === currentAccountOwner.id,
     content: post.contentHtml ?? "",
     reblog:
       post.sharing == null
@@ -238,8 +196,6 @@ export function serializePost(
     })),
     card:
       post.previewCard == null ? null : serializePreviewCard(post.previewCard),
-    emojis: serializeEmojis(post.emojis),
-    emoji_reactions: serializeReactions(post.reactions, currentAccountOwner),
     filtered: null,
   };
 }

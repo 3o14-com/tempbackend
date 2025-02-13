@@ -7,7 +7,6 @@ import {
   type Account,
   type Medium,
   type Post,
-  type Reaction,
   accountOwners,
   posts,
 } from "../../schema.ts";
@@ -45,10 +44,8 @@ profilePost.get<"/:handle{@[^/]+}/:id{[-a-f0-9]+}">(async (c) => {
               account: true,
               media: true,
               replyTarget: { with: { account: true } },
-              reactions: true,
             },
           },
-          reactions: true,
         },
       },
       replyTarget: { with: { account: true } },
@@ -57,7 +54,6 @@ profilePost.get<"/:handle{@[^/]+}/:id{[-a-f0-9]+}">(async (c) => {
           account: true,
           media: true,
           replyTarget: { with: { account: true } },
-          reactions: true,
         },
       },
       replies: {
@@ -74,10 +70,8 @@ profilePost.get<"/:handle{@[^/]+}/:id{[-a-f0-9]+}">(async (c) => {
                   account: true,
                   media: true,
                   replyTarget: { with: { account: true } },
-                  reactions: true,
                 },
               },
-              reactions: true,
             },
           },
           replyTarget: { with: { account: true } },
@@ -86,13 +80,10 @@ profilePost.get<"/:handle{@[^/]+}/:id{[-a-f0-9]+}">(async (c) => {
               account: true,
               media: true,
               replyTarget: { with: { account: true } },
-              reactions: true,
             },
           },
-          reactions: true,
         },
       },
-      reactions: true,
     },
   });
   if (post == null) return c.notFound();
@@ -113,10 +104,8 @@ interface PostPageProps {
         account: Account;
         media: Medium[];
         replyTarget: (Post & { account: Account }) | null;
-        reactions: Reaction[];
       })
       | null;
-      reactions: Reaction[];
     })
     | null;
     replyTarget: (Post & { account: Account }) | null;
@@ -125,7 +114,6 @@ interface PostPageProps {
       account: Account;
       media: Medium[];
       replyTarget: (Post & { account: Account }) | null;
-      reactions: Reaction[];
     })
     | null;
     replies: (Post & {
@@ -141,10 +129,8 @@ interface PostPageProps {
           account: Account;
           media: Medium[];
           replyTarget: (Post & { account: Account }) | null;
-          reactions: Reaction[];
         })
         | null;
-        reactions: Reaction[];
       })
       | null;
       replyTarget: (Post & { account: Account }) | null;
@@ -153,12 +139,9 @@ interface PostPageProps {
         account: Account;
         media: Medium[];
         replyTarget: (Post & { account: Account }) | null;
-        reactions: Reaction[];
       })
       | null;
-      reactions: Reaction[];
     })[];
-    reactions: Reaction[];
   };
 }
 

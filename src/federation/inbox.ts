@@ -1,23 +1,17 @@
 import {
   Accept,
-  type Add,
   Announce,
   Article,
   ChatMessage,
   type Create,
   type Delete,
-  Emoji,
-  EmojiReact,
   Follow,
-  Image,
   type InboxContext,
   Like,
-  Link,
   type Move,
   Note,
   Question,
   type Reject,
-  type Remove,
   type Undo,
   type Update,
   isActor,
@@ -27,13 +21,10 @@ import { and, eq } from "drizzle-orm";
 import { db } from "../db";
 import {
   type NewLike,
-  type NewPinnedPost,
   accounts,
   follows,
   likes,
-  pinnedPosts,
   posts,
-  reactions,
 } from "../schema";
 import { isUuid } from "../uuid";
 import {
@@ -398,60 +389,13 @@ export async function onPostUnshared(
   }
 }
 
-export async function onPostPinned(
-  ctx: InboxContext<void>,
-  add: Add,
-): Promise<void> {
-  if (add.targetId == null) return;
-  const object = await add.getObject();
-  if (!isPost(object)) return;
-  const accountList = await db.query.accounts.findMany({
-    where: eq(accounts.featuredUrl, add.targetId.href),
-  });
-  await db.transaction(async (tx) => {
-    const post = await persistPost(tx, object, ctx.origin, ctx);
-    if (post == null) return;
-    for (const account of accountList) {
-      await tx.insert(pinnedPosts).values({
-        postId: post.id,
-        accountId: account.id,
-      } satisfies NewPinnedPost);
-    }
-  });
-}
 
-export async function onPostUnpinned(
-  ctx: InboxContext<void>,
-  remove: Remove,
-): Promise<void> {
-  if (remove.targetId == null) return;
-  const object = await remove.getObject();
-  if (!isPost(object)) return;
-  const accountList = await db.query.accounts.findMany({
-    where: eq(accounts.featuredUrl, remove.targetId.href),
-  });
-  await db.transaction(async (tx) => {
-    const post = await persistPost(tx, object, ctx.origin, ctx);
-    if (post == null) return;
-    for (const account of accountList) {
-      await tx
-        .delete(pinnedPosts)
-        .where(
-          and(
-            eq(pinnedPosts.postId, post.id),
-            eq(pinnedPosts.accountId, account.id),
-          ),
-        );
-    }
-  });
-}
 
 export async function onLiked(
   ctx: InboxContext<void>,
   like: Like,
 ): Promise<void> {
   if (like.content != null) {
-    await onEmojiReactionAdded(ctx, like);
     return;
   }
   if (like.objectId == null) return;
@@ -504,7 +448,6 @@ export async function onUnliked(
   }
   const like = object;
   if (like.content != null) {
-    await onEmojiReactionRemoved(ctx, undo);
     return;
   }
   if (like.objectId == null) return;
@@ -544,103 +487,6 @@ export async function onUnliked(
   }
 }
 
-export async function onEmojiReactionAdded(
-  ctx: InboxContext<void>,
-  react: EmojiReact | Like,
-): Promise<void> {
-  if (react.content == null || react.objectId == null) return;
-  const object = ctx.parseUri(react.objectId);
-  if (
-    object?.type !== "object" ||
-    (object.class !== Note &&
-      object.class !== Article &&
-      object.class !== Question &&
-      object.class !== ChatMessage)
-  ) {
-    inboxLogger.debug("Unsupported object on EmojiReact: {objectId}", {
-      objectId: react.objectId?.href,
-    });
-    return;
-  }
-  const { username, id } = object.values;
-  if (!isUuid(id)) return;
-  const emoji = react.content.toString().trim();
-  if (emoji === "") return;
-  const actor = await react.getActor();
-  if (actor == null) return;
-  const account = await persistAccount(db, actor, ctx.origin, ctx);
-  if (account == null) return;
-  let emojiIri: URL | null = null;
-  let customEmoji: URL | null = null;
-  if (emoji.startsWith(":") && emoji.endsWith(":")) {
-    for await (const tag of react.getTags()) {
-      if (
-        tag.id == null ||
-        !(tag instanceof Emoji) ||
-        tag.name?.toString()?.trim() !== emoji
-      ) {
-        continue;
-      }
-      const icon = await tag.getIcon();
-      if (!(icon instanceof Image) || icon.url == null) continue;
-      customEmoji = icon.url instanceof Link ? icon.url.href : icon.url;
-      emojiIri = tag.id;
-      if (customEmoji != null) break;
-    }
-  }
-  await db.insert(reactions).values({
-    postId: id,
-    accountId: account.id,
-    emoji,
-    customEmoji: customEmoji?.href,
-    emojiIri: emojiIri?.href,
-  });
-  await ctx.forwardActivity({ username }, "followers", {
-    skipIfUnsigned: true,
-  });
-}
-
-export async function onEmojiReactionRemoved(
-  ctx: InboxContext<void>,
-  undo: Undo,
-): Promise<void> {
-  const object = await undo.getObject();
-  if (
-    !(object instanceof Like || object instanceof EmojiReact) ||
-    object.actorId?.href !== undo.actorId?.href ||
-    object.content == null
-  ) {
-    return;
-  }
-  const actor = await undo.getActor();
-  if (actor == null) return;
-  const account = await persistAccount(db, actor, ctx.origin, ctx);
-  if (account == null) return;
-  const post = ctx.parseUri(object.objectId);
-  if (
-    post?.type !== "object" ||
-    (post.class !== Note &&
-      post.class !== Article &&
-      post.class !== Question &&
-      post.class !== ChatMessage)
-  ) {
-    return;
-  }
-  const { username, id } = post.values;
-  if (!isUuid(id)) return;
-  await db
-    .delete(reactions)
-    .where(
-      and(
-        eq(reactions.postId, id),
-        eq(reactions.accountId, account.id),
-        eq(reactions.emoji, object.content.toString().trim()),
-      ),
-    );
-  await ctx.forwardActivity({ username }, "followers", {
-    skipIfUnsigned: true,
-  });
-}
 
 
 export async function onAccountMoved(

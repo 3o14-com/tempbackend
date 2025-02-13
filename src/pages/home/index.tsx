@@ -2,7 +2,6 @@ import { escape } from "es-toolkit";
 import { Hono } from "hono";
 import { Layout } from "../../components/Layout.tsx";
 import db from "../../db.ts";
-import { renderCustomEmojis } from "../../text.ts";
 
 const homePage = new Hono().basePath("/");
 
@@ -32,14 +31,8 @@ homePage.get("/", async (c) => {
       </hgroup>
       {owners.map((owner) => {
         const url = owner.account.url ?? owner.account.iri;
-        const nameHtml = renderCustomEmojis(
-          escape(owner.account.name),
-          owner.account.emojis,
-        );
-        const bioHtml = renderCustomEmojis(
-          owner.account.bioHtml ?? "",
-          owner.account.emojis,
-        );
+        const nameHtml = escape(owner.account.name);
+        const bioHtml = owner.account.bioHtml ?? "";
         return (
           <article>
             <hgroup>

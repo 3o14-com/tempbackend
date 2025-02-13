@@ -12,9 +12,7 @@ import {
   isNotNull,
   isNull,
   lt,
-  notInArray,
   or,
-  sql,
 } from "drizzle-orm";
 import { Hono } from "hono";
 import mime from "mime";
@@ -39,7 +37,6 @@ import { type Variables, scopeRequired, tokenRequired } from "../../oauth";
 import {
   type Account,
   type AccountOwner,
-  type NewMute,
   accountOwners,
   accounts,
   follows,
@@ -47,12 +44,10 @@ import {
   lists,
   media,
   mentions,
-  mutes,
-  pinnedPosts,
   posts,
 } from "../../schema";
 import { disk, getAssetUrl } from "../../storage";
-import { extractCustomEmojis, formatText } from "../../text";
+import { formatText } from "../../text";
 import { type Uuid, isUuid } from "../../uuid";
 import { timelineQuerySchema } from "./timelines";
 
@@ -184,16 +179,10 @@ app.patch(
     const bioResult =
       form.note == null ? null : await formatText(db, form.note, fmtOpts);
     const name = form.display_name ?? account.name;
-    const nameEmojis = await extractCustomEmojis(db, name);
-    const emojis =
-      bioResult == null
-        ? { ...account.emojis, ...nameEmojis }
-        : { ...nameEmojis, ...bioResult.emojis };
     const updatedAccounts = await db
       .update(accounts)
       .set({
         name,
-        emojis,
         bioHtml: bioResult == null ? account.bioHtml : bioResult.html,
         avatarUrl,
         coverUrl,
@@ -273,9 +262,6 @@ app.get(
             },
             followers: {
               where: eq(follows.followerId, owner.id),
-            },
-            mutedBy: {
-              where: eq(mutes.accountId, owner.id),
             },
           },
         })
@@ -504,7 +490,6 @@ app.get(
         only_media: z.enum(["true", "false"]).optional(),
         exclude_replies: z.enum(["true", "false"]).optional(),
         exclude_reblogs: z.enum(["true", "false"]).optional(),
-        pinned: z.enum(["true", "false"]).optional(),
         tagged: z.string().optional(),
       }),
     ),
@@ -573,56 +558,6 @@ app.get(
             ),
           ),
         ),
-        // Hide the posts from the muted accounts:
-        notInArray(
-          posts.accountId,
-          db
-            .select({ accountId: mutes.mutedAccountId })
-            .from(mutes)
-            .where(
-              and(
-                eq(mutes.accountId, tokenOwner.id),
-                or(
-                  isNull(mutes.duration),
-                  gt(
-                    sql`${mutes.created} + ${mutes.duration}`,
-                    sql`CURRENT_TIMESTAMP`,
-                  ),
-                ),
-              ),
-            ),
-        ),
-        or(
-          isNull(posts.sharingId),
-          notInArray(
-            posts.sharingId,
-            db
-              .select({ id: posts.id })
-              .from(posts)
-              .innerJoin(mutes, eq(mutes.mutedAccountId, posts.accountId))
-              .where(
-                and(
-                  eq(mutes.accountId, tokenOwner.id),
-                  or(
-                    isNull(mutes.duration),
-                    gt(
-                      sql`${mutes.created} + ${mutes.duration}`,
-                      sql`CURRENT_TIMESTAMP`,
-                    ),
-                  ),
-                ),
-              ),
-          ),
-        ),
-        query.pinned === "true"
-          ? inArray(
-            posts.id,
-            db
-              .select({ id: pinnedPosts.postId })
-              .from(pinnedPosts)
-              .where(eq(pinnedPosts.accountId, id)),
-          )
-          : undefined,
         query.exclude_replies === "true"
           ? isNull(posts.replyTargetId)
           : undefined,
@@ -690,9 +625,6 @@ app.post(
         followers: {
           where: eq(follows.followerId, owner.id),
         },
-        mutedBy: {
-          where: eq(mutes.accountId, owner.id),
-        },
       },
     });
     if (account == null) return c.json({ error: "Record not found" }, 404);
@@ -729,9 +661,6 @@ app.post(
         },
         followers: {
           where: eq(follows.followerId, owner.id),
-        },
-        mutedBy: {
-          where: eq(mutes.accountId, owner.id),
         },
       },
     });
@@ -810,113 +739,5 @@ app.get(
   },
 );
 
-app.post(
-  "/:id/mute",
-  tokenRequired,
-  scopeRequired(["write:mutes"]),
-  zValidator(
-    "json",
-    z.object({
-      notifications: z.boolean().default(true),
-      duration: z.number().default(0),
-    }),
-  ),
-  async (c) => {
-    const id = c.req.param("id");
-    if (!isUuid(id)) return c.json({ error: "Record not found" }, 404);
-    const owner = c.get("token").accountOwner;
-    if (owner == null) {
-      return c.json(
-        { error: "This method requires an authenticated user" },
-        422,
-      );
-    }
-    const { notifications, duration } = c.req.valid("json");
-    const account = await db.query.accounts.findFirst({
-      where: eq(accounts.id, id),
-      with: {
-        owner: true,
-        mutes: { where: eq(mutes.accountId, owner.id) },
-        following: { where: eq(follows.followingId, owner.id) },
-      },
-    });
-    if (account == null) return c.json({ error: "Record not found" }, 404);
-    const durationStr =
-      duration <= 0
-        ? null
-        : new Date(duration * 1000)
-          .toISOString()
-          .replace(/^[^T]+T|\.[^Z]+Z?$/g, "");
-    await db
-      .insert(mutes)
-      .values({
-        id: crypto.randomUUID(),
-        accountId: owner.id,
-        mutedAccountId: account.id,
-        notifications,
-        duration: durationStr,
-      } satisfies NewMute)
-      .onConflictDoUpdate({
-        target: [mutes.accountId, mutes.mutedAccountId],
-        set: {
-          notifications,
-          duration: durationStr,
-          created: new Date(),
-        },
-      });
-    const result = await db.query.accounts.findFirst({
-      where: eq(accounts.id, id),
-      with: {
-        following: {
-          where: eq(follows.followingId, owner.id),
-        },
-        followers: {
-          where: eq(follows.followerId, owner.id),
-        },
-        mutedBy: {
-          where: eq(mutes.accountId, owner.id),
-        },
-      },
-    });
-    if (result == null) return c.json({ error: "Record not found" }, 404);
-    return c.json(serializeRelationship(result, owner));
-  },
-);
-
-app.post(
-  "/:id/unmute",
-  tokenRequired,
-  scopeRequired(["write:mutes"]),
-  async (c) => {
-    const id = c.req.param("id");
-    if (!isUuid(id)) return c.json({ error: "Record not found" }, 404);
-    const owner = c.get("token").accountOwner;
-    if (owner == null) {
-      return c.json(
-        { error: "This method requires an authenticated user" },
-        422,
-      );
-    }
-    await db
-      .delete(mutes)
-      .where(and(eq(mutes.accountId, owner.id), eq(mutes.mutedAccountId, id)));
-    const account = await db.query.accounts.findFirst({
-      where: eq(accounts.id, id),
-      with: {
-        following: {
-          where: eq(follows.followingId, owner.id),
-        },
-        followers: {
-          where: eq(follows.followerId, owner.id),
-        },
-        mutedBy: {
-          where: eq(mutes.accountId, owner.id),
-        },
-      },
-    });
-    if (account == null) return c.json({ error: "Record not found" }, 404);
-    return c.json(serializeRelationship(account, owner));
-  },
-);
 
 export default app;

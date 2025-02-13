@@ -1,4 +1,3 @@
-import { Temporal } from "@js-temporal/polyfill";
 import { getLogger } from "@logtape/logtape";
 import {
   type ExtractTablesWithRelations,
@@ -17,7 +16,6 @@ import type {
   List,
   ListMember,
   Mention,
-  Mute,
   Post,
 } from "../schema";
 import * as schema from "../schema";
@@ -59,7 +57,6 @@ export function shouldExcludePostFromTimeline(
   owner: AccountOwner & {
     account: Account & {
       following: Follow[];
-      mutes: Mute[];
     };
   },
 ): boolean {
@@ -69,22 +66,6 @@ export function shouldExcludePostFromTimeline(
       !isPostVisibleToAccount(post.sharing, owner.account))
   ) {
     return true;
-  }
-  for (const mute of owner.account.mutes) {
-    if (mute.duration != null) {
-      const created = Temporal.Instant.from(mute.created.toISOString());
-      const duration = Temporal.Duration.from(mute.duration);
-      const expires = created.add(duration);
-      if (Temporal.Now.instant().until(expires).total("nanoseconds") <= 0) {
-        continue;
-      }
-    }
-    if (
-      mute.mutedAccountId === post.accountId ||
-      mute.mutedAccountId === post.sharing?.accountId
-    ) {
-      return true;
-    }
   }
   return false;
 }
@@ -98,7 +79,6 @@ export function shouldIncludePostInTimeline(
   owner: AccountOwner & {
     account: Account & {
       following: Follow[];
-      mutes: Mute[];
     };
   },
 ): boolean {
@@ -118,10 +98,7 @@ export function shouldIncludePostInTimeline(
         replyTarget.accountId === owner.id ||
         (owner.account.following.some(
           (f) => f.followingId === replyTarget.accountId,
-        ) &&
-          !owner.account.mutes.some(
-            (m) => m.mutedAccountId === replyTarget.accountId,
-          ))
+        ))
       );
     }
   }
@@ -149,7 +126,6 @@ export function shouldIncludePostInList(
     accountOwner: AccountOwner & {
       account: Account & {
         following: Follow[];
-        mutes: Mute[];
       };
     };
     members: ListMember[];
@@ -189,7 +165,6 @@ export async function appendPostToTimelines(
       account: {
         with: {
           following: true,
-          mutes: true,
         },
       },
     },
@@ -201,7 +176,6 @@ export async function appendPostToTimelines(
           account: {
             with: {
               following: true,
-              mutes: true,
             },
           },
         },
@@ -294,7 +268,6 @@ export async function rebuildTimelines(
       account: {
         with: {
           following: true,
-          mutes: true,
         },
       },
     },
@@ -306,7 +279,6 @@ export async function rebuildTimelines(
           account: {
             with: {
               following: true,
-              mutes: true,
             },
           },
         },

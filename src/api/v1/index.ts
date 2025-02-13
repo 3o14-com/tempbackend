@@ -1,49 +1,35 @@
 import { zValidator } from "@hono/zod-validator";
-import { Temporal } from "@js-temporal/polyfill";
-import { and, desc, eq, gte, inArray, lt, lte } from "drizzle-orm";
+import { and, desc, eq, lt } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 import { db } from "../../db";
-import { serializeAccount } from "../../entities/account";
 import { getPostRelations, serializePost } from "../../entities/status";
 import { serializeTag } from "../../entities/tag";
 import { type Variables, scopeRequired, tokenRequired } from "../../oauth";
 import {
-  accounts as accountsTable,
-  bookmarks,
   likes,
-  mutes,
 } from "../../schema";
-import { uuid } from "../../uuid";
 import accounts from "./accounts";
 import apps from "./apps";
-import featured_tags from "./featured_tags";
 import follow_requests from "./follow_requests";
 import instance from "./instance";
 import lists from "./lists";
-import markers from "./markers";
 import media from "./media";
 import notifications from "./notifications";
-import reports from "./reports";
 import statuses from "./statuses";
-import tags from "./tags";
 import timelines from "./timelines";
 
 const app = new Hono<{ Variables: Variables }>();
 
 app.route("/apps", apps);
 app.route("/accounts", accounts);
-app.route("/featured_tags", featured_tags);
 app.route("/follow_requests", follow_requests);
 app.route("/instance", instance);
 app.route("/lists", lists);
-app.route("/markers", markers);
 app.route("/media", media);
 app.route("/notifications", notifications);
 app.route("/statuses", statuses);
-app.route("/tags", tags);
 app.route("/timelines", timelines);
-app.route("/reports", reports);
 
 app.get(
   "/preferences",
@@ -60,19 +46,6 @@ app.get(
     });
   },
 );
-
-app.get("/custom_emojis", async (c) => {
-  const emojis = await db.query.customEmojis.findMany();
-  return c.json(
-    emojis.map((emoji) => ({
-      shortcode: emoji.shortcode,
-      url: emoji.url,
-      static_url: emoji.url,
-      visible_in_picker: true,
-      category: emoji.category,
-    })),
-  );
-});
 
 app.get("/announcements", (c) => {
   return c.json([]);
@@ -132,59 +105,6 @@ app.get(
   },
 );
 
-app.get(
-  "/bookmarks",
-  tokenRequired,
-  scopeRequired(["read:bookmarks"]),
-  zValidator(
-    "query",
-    z.object({
-      before: z.string().datetime().optional(),
-      limit: z
-        .string()
-        .default("20")
-        .transform((v) => Number.parseInt(v)),
-    }),
-  ),
-  async (c) => {
-    const owner = c.get("token").accountOwner;
-    if (owner == null) {
-      return c.json(
-        { error: "This method requires an authenticated user" },
-        422,
-      );
-    }
-    const query = c.req.valid("query");
-    const bookmarkList = await db.query.bookmarks.findMany({
-      where: and(
-        eq(bookmarks.accountOwnerId, owner.id),
-        query.before == null
-          ? undefined
-          : lt(bookmarks.created, new Date(query.before)),
-      ),
-      with: {
-        post: { with: getPostRelations(owner.id) },
-      },
-      orderBy: [desc(bookmarks.created)],
-      limit: query.limit,
-    });
-    return c.json(
-      bookmarkList.map((bm) => serializePost(bm.post, owner, c.req.url)),
-      200,
-      bookmarkList.length < query.limit
-        ? {}
-        : {
-          Link: `<${new URL(
-            `?before=${encodeURIComponent(
-              bookmarkList[bookmarkList.length - 1].created.toISOString(),
-            )}&limit=${query.limit}`,
-            c.req.url,
-          ).href
-            }>; rel="next"`,
-        },
-    );
-  },
-);
 
 app.get(
   "/followed_tags",
@@ -201,61 +121,6 @@ app.get(
     return c.json(
       owner.followedTags.map((tag) => serializeTag(tag, owner, c.req.url)),
     );
-  },
-);
-
-app.get(
-  "/mutes",
-  tokenRequired,
-  scopeRequired(["read:mutes"]),
-  zValidator(
-    "query",
-    z.object({
-      max_id: uuid.optional(),
-      since_id: uuid.optional(),
-      limit: z
-        .string()
-        .default("40")
-        .transform((v) => {
-          const parsed = Number.parseInt(v);
-          return Math.min(parsed, 80);
-        }),
-    }),
-  ),
-  async (c) => {
-    const owner = c.get("token").accountOwner;
-    if (owner == null) {
-      return c.json(
-        { error: "This method requires an authenticated user" },
-        422,
-      );
-    }
-
-    const muteList = await db.query.mutes.findMany({
-      where: eq(mutes.accountId, owner.id),
-    });
-
-    if (muteList.length < 1) return c.json([]);
-
-    const query = c.req.valid("query");
-
-    const mutedAccounts = await db.query.accounts.findMany({
-      where: and(
-        inArray(
-          accountsTable.id,
-          muteList.map((m) => m.mutedAccountId),
-        ),
-        query.max_id == null ? undefined : lte(accountsTable.id, query.max_id),
-        query.since_id == null
-          ? undefined
-          : gte(accountsTable.id, query.since_id),
-      ),
-      with: { owner: true, successor: true },
-      orderBy: [desc(accountsTable.id)],
-      limit: query.limit ?? 40,
-    });
-
-    return c.json(mutedAccounts.map((a) => serializeAccount(a, c.req.url)));
   },
 );
 

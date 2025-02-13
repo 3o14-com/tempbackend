@@ -10,7 +10,7 @@ import {
 import { federation } from "../../federation";
 import { updateAccountStats } from "../../federation/account";
 import { type Variables, scopeRequired, tokenRequired } from "../../oauth";
-import { accounts, follows, mutes } from "../../schema";
+import { accounts, follows } from "../../schema";
 import { isUuid } from "../../uuid";
 
 const app = new Hono<{ Variables: Variables }>();
@@ -94,9 +94,6 @@ app.post(
         following: {
           where: eq(follows.followingId, owner.id),
         },
-        mutedBy: {
-          where: eq(mutes.accountId, owner.id),
-        },
       },
     });
     if (follower2 == null) return c.json({ error: "Record not found" }, 404);
@@ -159,9 +156,6 @@ app.post(
         },
         following: {
           where: eq(follows.followingId, owner.id),
-        },
-        mutedBy: {
-          where: eq(mutes.accountId, owner.id),
         },
       },
     });

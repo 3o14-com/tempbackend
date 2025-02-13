@@ -8,13 +8,9 @@ import { db } from "../../db.ts";
 import {
   type Account,
   type AccountOwner,
-  type FeaturedTag,
   type Medium,
   type Post,
-  type Reaction,
   accountOwners,
-  featuredTags,
-  pinnedPosts,
   posts,
 } from "../../schema.ts";
 import { isUuid } from "../../uuid.ts";
@@ -82,10 +78,8 @@ profile.get<"/:handle">(async (c) => {
               account: true,
               media: true,
               replyTarget: { with: { account: true } },
-              reactions: true,
             },
           },
-          reactions: true,
         },
       },
       replyTarget: { with: { account: true } },
@@ -94,55 +88,9 @@ profile.get<"/:handle">(async (c) => {
           account: true,
           media: true,
           replyTarget: { with: { account: true } },
-          reactions: true,
         },
       },
-      reactions: true,
     },
-  });
-  const pinnedPostList =
-    cont == null
-      ? await db.query.pinnedPosts.findMany({
-        where: and(eq(pinnedPosts.accountId, owner.id)),
-        orderBy: desc(pinnedPosts.index),
-        with: {
-          post: {
-            with: {
-              account: true,
-              media: true,
-              sharing: {
-                with: {
-                  account: true,
-                  media: true,
-                  replyTarget: { with: { account: true } },
-                  quoteTarget: {
-                    with: {
-                      account: true,
-                      media: true,
-                      replyTarget: { with: { account: true } },
-                      reactions: true,
-                    },
-                  },
-                  reactions: true,
-                },
-              },
-              replyTarget: { with: { account: true } },
-              quoteTarget: {
-                with: {
-                  account: true,
-                  media: true,
-                  replyTarget: { with: { account: true } },
-                  reactions: true,
-                },
-              },
-              reactions: true,
-            },
-          },
-        },
-      })
-      : [];
-  const featuredTagList = await db.query.featuredTags.findMany({
-    where: eq(featuredTags.accountOwnerId, owner.id),
   });
   const atomUrl = new URL(c.req.url);
   atomUrl.pathname += "/atom.xml";
@@ -154,12 +102,6 @@ profile.get<"/:handle">(async (c) => {
     <ProfilePage
       accountOwner={owner}
       posts={postList.slice(0, PAGE_SIZE)}
-      pinnedPosts={pinnedPostList
-        .map((p) => p.post)
-        .filter(
-          (p) => p.visibility === "public" || p.visibility === "unlisted",
-        )}
-      featuredTags={featuredTagList}
       atomUrl={atomUrl.href}
       olderUrl={olderUrl}
       newerUrl={newerUrl}
@@ -182,10 +124,8 @@ interface ProfilePageProps {
         account: Account;
         media: Medium[];
         replyTarget: (Post & { account: Account }) | null;
-        reactions: Reaction[];
       })
       | null;
-      reactions: Reaction[];
     })
     | null;
     replyTarget: (Post & { account: Account }) | null;
@@ -194,42 +134,9 @@ interface ProfilePageProps {
       account: Account;
       media: Medium[];
       replyTarget: (Post & { account: Account }) | null;
-      reactions: Reaction[];
     })
     | null;
-    reactions: Reaction[];
   })[];
-  readonly pinnedPosts: (Post & {
-    account: Account;
-    media: Medium[];
-    sharing:
-    | (Post & {
-      account: Account;
-      media: Medium[];
-      replyTarget: (Post & { account: Account }) | null;
-      quoteTarget:
-      | (Post & {
-        account: Account;
-        media: Medium[];
-        replyTarget: (Post & { account: Account }) | null;
-        reactions: Reaction[];
-      })
-      | null;
-      reactions: Reaction[];
-    })
-    | null;
-    replyTarget: (Post & { account: Account }) | null;
-    quoteTarget:
-    | (Post & {
-      account: Account;
-      media: Medium[];
-      replyTarget: (Post & { account: Account }) | null;
-      reactions: Reaction[];
-    })
-    | null;
-    reactions: Reaction[];
-  })[];
-  readonly featuredTags: FeaturedTag[];
   readonly atomUrl: string;
   readonly olderUrl?: string;
   readonly newerUrl?: string;
@@ -238,8 +145,6 @@ interface ProfilePageProps {
 function ProfilePage({
   accountOwner,
   posts,
-  pinnedPosts,
-  featuredTags,
   atomUrl,
   olderUrl,
   newerUrl,
@@ -255,24 +160,6 @@ function ProfilePage({
       ]}
     >
       <Profile accountOwner={accountOwner} />
-      {featuredTags.length > 0 && (
-        <p>
-          Featured tags:{" "}
-          {featuredTags.map((tag) => (
-            <>
-              <a
-                href={`/tags/${encodeURIComponent(tag.name)}?handle=${accountOwner.handle
-                  }`}
-              >
-                #{tag.name}
-              </a>{" "}
-            </>
-          ))}
-        </p>
-      )}
-      {pinnedPosts.map((post) => (
-        <PostView post={post} pinned={true} />
-      ))}
       {posts.map((post) => (
         <PostView post={post} />
       ))}

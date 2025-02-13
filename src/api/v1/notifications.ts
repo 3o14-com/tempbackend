@@ -3,13 +3,11 @@ import {
   and,
   desc,
   eq,
-  gt,
   inArray,
   isNotNull,
   isNull,
   lt,
   ne,
-  notInArray,
   or,
   sql,
 } from "drizzle-orm";
@@ -20,7 +18,6 @@ import {
   serializeAccount,
   serializeAccountOwner,
 } from "../../entities/account";
-import { serializeReaction } from "../../entities/emoji";
 import { getPostRelations, serializePost } from "../../entities/status";
 import { type Variables, scopeRequired, tokenRequired } from "../../oauth";
 import {
@@ -28,9 +25,7 @@ import {
   follows,
   likes,
   mentions,
-  mutes,
   posts,
-  reactions,
 } from "../../schema";
 import type { Uuid } from "../../uuid";
 
@@ -45,7 +40,6 @@ export type NotificationType =
   | "follow"
   | "follow_request"
   | "favourite"
-  | "emoji_reaction"
   | "update"
   | "admin.sign_up"
   | "admin.report";
@@ -75,7 +69,6 @@ app.get(
         "follow",
         "follow_request",
         "favourite",
-        "emoji_reaction",
         "update",
         "admin.sign_up",
         "admin.report",
@@ -91,8 +84,6 @@ app.get(
           created: sql<Date>`coalesce(${posts.published}, ${posts.updated})`,
           accountId: posts.accountId,
           postId: sql<string | null>`${posts.id}`,
-          emoji: sql<string | null>`null`,
-          customEmoji: sql<string | null>`null`,
         })
         .from(posts)
         .where(
@@ -115,24 +106,6 @@ app.get(
             ),
             olderThan == null ? undefined : lt(posts.published, olderThan),
             ne(posts.accountId, owner.id),
-            notInArray(
-              posts.accountId,
-              db
-                .select({ accountId: mutes.mutedAccountId })
-                .from(mutes)
-                .where(
-                  and(
-                    eq(mutes.accountId, owner.id),
-                    or(
-                      isNull(mutes.duration),
-                      gt(
-                        sql`${mutes.created} + ${mutes.duration}`,
-                        sql`CURRENT_TIMESTAMP`,
-                      ),
-                    ),
-                  ),
-                ),
-            ),
           ),
         )
         .orderBy(desc(posts.published))
@@ -154,24 +127,6 @@ app.get(
             eq(sharingPosts.accountId, owner.id),
             olderThan == null ? undefined : lt(posts.published, olderThan),
             ne(posts.accountId, owner.id),
-            notInArray(
-              posts.accountId,
-              db
-                .select({ accountId: mutes.mutedAccountId })
-                .from(mutes)
-                .where(
-                  and(
-                    eq(mutes.accountId, owner.id),
-                    or(
-                      isNull(mutes.duration),
-                      gt(
-                        sql`${mutes.created} + ${mutes.duration}`,
-                        sql`CURRENT_TIMESTAMP`,
-                      ),
-                    ),
-                  ),
-                ),
-            ),
           ),
         )
         .orderBy(desc(posts.published))
@@ -192,24 +147,6 @@ app.get(
             eq(follows.followingId, owner.id),
             isNotNull(follows.approved),
             olderThan == null ? undefined : lt(follows.approved, olderThan),
-            notInArray(
-              follows.followerId,
-              db
-                .select({ accountId: mutes.mutedAccountId })
-                .from(mutes)
-                .where(
-                  and(
-                    eq(mutes.accountId, owner.id),
-                    or(
-                      isNull(mutes.duration),
-                      gt(
-                        sql`${mutes.created} + ${mutes.duration}`,
-                        sql`CURRENT_TIMESTAMP`,
-                      ),
-                    ),
-                  ),
-                ),
-            ),
           ),
         )
         .orderBy(desc(follows.approved))
@@ -221,8 +158,6 @@ app.get(
           created: follows.created,
           accountId: follows.followerId,
           postId: sql<string | null>`null`,
-          emoji: sql<string | null>`null`,
-          customEmoji: sql<string | null>`null`,
         })
         .from(follows)
         .where(
@@ -230,24 +165,6 @@ app.get(
             eq(follows.followingId, owner.id),
             isNull(follows.approved),
             olderThan == null ? undefined : lt(follows.created, olderThan),
-            notInArray(
-              follows.followerId,
-              db
-                .select({ accountId: mutes.mutedAccountId })
-                .from(mutes)
-                .where(
-                  and(
-                    eq(mutes.accountId, owner.id),
-                    or(
-                      isNull(mutes.duration),
-                      gt(
-                        sql`${mutes.created} + ${mutes.duration}`,
-                        sql`CURRENT_TIMESTAMP`,
-                      ),
-                    ),
-                  ),
-                ),
-            ),
           ),
         )
         .orderBy(desc(follows.created))
@@ -269,66 +186,9 @@ app.get(
             eq(posts.accountId, owner.id),
             olderThan == null ? undefined : lt(likes.created, olderThan),
             ne(likes.accountId, owner.id),
-            notInArray(
-              likes.accountId,
-              db
-                .select({ accountId: mutes.mutedAccountId })
-                .from(mutes)
-                .where(
-                  and(
-                    eq(mutes.accountId, owner.id),
-                    or(
-                      isNull(mutes.duration),
-                      gt(
-                        sql`${mutes.created} + ${mutes.duration}`,
-                        sql`CURRENT_TIMESTAMP`,
-                      ),
-                    ),
-                  ),
-                ),
-            ),
           ),
         )
         .orderBy(desc(likes.created))
-        .limit(limit),
-      emoji_reaction: db
-        .select({
-          id: sql<string>`${reactions.postId} || ':' || ${reactions.accountId} || ':' || ${reactions.emoji}`,
-          type: sql<NotificationType>`'emoji_reaction'`,
-          created: reactions.created,
-          accountId: reactions.accountId,
-          postId: sql<string | null>`${reactions.postId}`,
-          emoji: sql<string | null>`${reactions.emoji}`,
-          customEmoji: sql<string | null>`${reactions.customEmoji}`,
-        })
-        .from(reactions)
-        .leftJoin(posts, eq(reactions.postId, posts.id))
-        .where(
-          and(
-            eq(posts.accountId, owner.id),
-            olderThan == null ? undefined : lt(reactions.created, olderThan),
-            ne(reactions.accountId, owner.id),
-            notInArray(
-              reactions.accountId,
-              db
-                .select({ accountId: mutes.mutedAccountId })
-                .from(mutes)
-                .where(
-                  and(
-                    eq(mutes.accountId, owner.id),
-                    or(
-                      isNull(mutes.duration),
-                      gt(
-                        sql`${mutes.created} + ${mutes.duration}`,
-                        sql`CURRENT_TIMESTAMP`,
-                      ),
-                    ),
-                  ),
-                ),
-            ),
-          ),
-        )
-        .orderBy(desc(reactions.created))
         .limit(limit),
     };
     const qs = Object.entries(queries)
@@ -348,8 +208,6 @@ app.get(
         created: sql<Date>`q.created`,
         accountId: sql<string>`q.accountId`,
         postId: sql<string | null>`q.postId`,
-        emoji: sql<string | null>`q.emoji`,
-        customEmoji: sql<string | null>`q.customEmoji`,
       })
       .from(
         sql`${q} AS q (id, "type", created, accountId, postId, emoji, customEmoji)`,
@@ -361,8 +219,6 @@ app.get(
         created: Date | string;
         accountId: Uuid;
         postId: Uuid | null;
-        emoji: string | null;
-        customEmoji: string | null;
       }[];
     let nextLink: URL | null = null;
     if (notifications.length >= limit) {
@@ -429,22 +285,6 @@ app.get(
               n.postId == null
                 ? null
                 : serializePost(postMap[n.postId], owner, c.req.url),
-            ...(n.emoji == null || n.postId == null
-              ? {}
-              : {
-                emoji_reaction: serializeReaction(
-                  {
-                    postId: n.postId,
-                    accountId: n.accountId,
-                    account,
-                    emoji: n.emoji,
-                    customEmoji: n.customEmoji,
-                    emojiIri: null,
-                    created: new Date(created_at),
-                  },
-                  owner,
-                ),
-              }),
           };
         })
         .filter((n) => n != null),

@@ -74,11 +74,6 @@ app.get("/", async (c) => {
     contact_account: serializeAccountOwner(accountOwner, c.req.url),
     rules: [],
     feature_quote: true,
-    fedibird_capabilities: [
-      "emoji_reaction",
-      "enable_wide_emoji",
-      "enable_wide_emoji_reaction",
-    ],
   });
 });
 

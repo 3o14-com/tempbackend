@@ -2,13 +2,10 @@ import { isNotNull, relations, sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
   bigint,
-  bigserial,
   boolean,
   check,
-  foreignKey,
   index,
   integer,
-  interval,
   json,
   jsonb,
   pgEnum,
@@ -84,7 +81,6 @@ export const accounts = pgTable("accounts", {
     .notNull()
     .default({})
     .$type<Record<string, string>>(),
-  emojis: jsonb("emojis").notNull().default({}).$type<Record<string, string>>(),
   sensitive: boolean("sensitive").notNull().default(false),
   successorId: uuid("successor_id")
     .$type<Uuid>()
@@ -115,9 +111,6 @@ export const accountRelations = relations(accounts, ({ one, many }) => ({
   posts: many(posts),
   mentions: many(mentions),
   likes: many(likes),
-  pinnedPosts: many(pinnedPosts),
-  mutes: many(mutes, { relationName: "muter" }),
-  mutedBy: many(mutes, { relationName: "muted" }),
   instance: one(instances),
 }));
 
@@ -166,9 +159,6 @@ export const accountOwnerRelations = relations(
       references: [accounts.id],
     }),
     accessTokens: many(accessTokens),
-    bookmarks: many(bookmarks),
-    markers: many(markers),
-    featuredTags: many(featuredTags),
     lists: many(lists),
   }),
 );
@@ -234,27 +224,22 @@ export const followRelations = relations(follows, ({ one }) => ({
 export const scopeEnum = pgEnum("scope", [
   "read",
   "read:accounts",
-  "read:bookmarks",
   "read:favourites",
   "read:filters",
   "read:follows",
   "read:lists",
-  "read:mutes",
   "read:notifications",
   "read:search",
   "read:statuses",
   "write",
   "write:accounts",
-  "write:bookmarks",
   "write:conversations",
   "write:favourites",
   "write:filters",
   "write:follows",
   "write:lists",
   "write:media",
-  "write:mutes",
   "write:notifications",
-  "write:reports",
   "write:statuses",
   "follow",
   "push",
@@ -356,10 +341,6 @@ export const posts = pgTable(
     content: text("content"),
     language: text("language"),
     tags: jsonb("tags").notNull().default({}).$type<Record<string, string>>(),
-    emojis: jsonb("emojis")
-      .notNull()
-      .default({})
-      .$type<Record<string, string>>(),
     sensitive: boolean("sensitive").notNull().default(false),
     url: text("url"),
     previewCard: jsonb("preview_card").$type<PreviewCard>(),
@@ -408,7 +389,6 @@ export const postRelations = relations(posts, ({ one, many }) => ({
   }),
   replies: many(posts, { relationName: "reply" }),
   likes: many(likes),
-  reactions: many(reactions),
   sharing: one(posts, {
     fields: [posts.sharingId],
     references: [posts.id],
@@ -423,11 +403,6 @@ export const postRelations = relations(posts, ({ one, many }) => ({
   quotes: many(posts, { relationName: "quote" }),
   media: many(media),
   mentions: many(mentions),
-  bookmarks: many(bookmarks),
-  pin: one(pinnedPosts, {
-    fields: [posts.id, posts.accountId],
-    references: [pinnedPosts.postId, pinnedPosts.accountId],
-  }),
 }));
 
 export const media = pgTable(
@@ -496,42 +471,6 @@ export const mentionRelations = relations(mentions, ({ one }) => ({
   }),
 }));
 
-export const pinnedPosts = pgTable(
-  "pinned_posts",
-  {
-    index: bigserial("index", { mode: "number" }).notNull().primaryKey(),
-    postId: uuid("post_id").$type<Uuid>().notNull(),
-    accountId: uuid("account_id")
-      .$type<Uuid>()
-      .notNull()
-      .references(() => accounts.id, { onDelete: "cascade" }),
-    created: timestamp("created", { withTimezone: true })
-      .notNull()
-      .default(currentTimestamp),
-  },
-  (table) => [
-    unique().on(table.postId, table.accountId),
-    foreignKey({
-      columns: [table.postId, table.accountId],
-      foreignColumns: [posts.id, posts.accountId],
-    }).onDelete("cascade"),
-    index().on(table.accountId, table.postId),
-  ],
-);
-
-export const pinnedPostRelations = relations(pinnedPosts, ({ one }) => ({
-  post: one(posts, {
-    fields: [pinnedPosts.postId, pinnedPosts.accountId],
-    references: [posts.id, posts.accountId],
-  }),
-  account: one(accounts, {
-    fields: [pinnedPosts.accountId],
-    references: [accounts.id],
-  }),
-}));
-
-export type PinnedPost = typeof pinnedPosts.$inferSelect;
-export type NewPinnedPost = typeof pinnedPosts.$inferInsert;
 
 export const likes = pgTable(
   "likes",
@@ -568,134 +507,6 @@ export const likeRelations = relations(likes, ({ one }) => ({
   }),
 }));
 
-export const reactions = pgTable(
-  "reactions",
-  {
-    postId: uuid("post_id")
-      .$type<Uuid>()
-      .notNull()
-      .references(() => posts.id, { onDelete: "cascade" }),
-    accountId: uuid("account_id")
-      .$type<Uuid>()
-      .notNull()
-      .references(() => accounts.id, { onDelete: "cascade" }),
-    emoji: text("emoji").notNull(),
-    customEmoji: text("custom_emoji"),
-    emojiIri: text("emoji_iri"),
-    created: timestamp("created", { withTimezone: true })
-      .notNull()
-      .default(currentTimestamp),
-  },
-  (table) => [
-    primaryKey({ columns: [table.postId, table.accountId, table.emoji] }),
-    index().on(table.postId),
-    index().on(table.postId, table.accountId),
-  ],
-);
-
-export type Reaction = typeof reactions.$inferSelect;
-export type NewReaction = typeof reactions.$inferInsert;
-
-export const reactionRelations = relations(reactions, ({ one }) => ({
-  post: one(posts, {
-    fields: [reactions.postId],
-    references: [posts.id],
-  }),
-  account: one(accounts, {
-    fields: [reactions.accountId],
-    references: [accounts.id],
-  }),
-}));
-
-export const bookmarks = pgTable(
-  "bookmarks",
-  {
-    postId: uuid("post_id")
-      .$type<Uuid>()
-      .notNull()
-      .references(() => posts.id, { onDelete: "cascade" }),
-    accountOwnerId: uuid("account_owner_id")
-      .$type<Uuid>()
-      .notNull()
-      .references(() => accountOwners.id, { onDelete: "cascade" }),
-    created: timestamp("created", { withTimezone: true })
-      .notNull()
-      .default(currentTimestamp),
-  },
-  (table) => [
-    primaryKey({ columns: [table.postId, table.accountOwnerId] }),
-    index().on(table.postId, table.accountOwnerId),
-  ],
-);
-
-export type Bookmark = typeof bookmarks.$inferSelect;
-export type NewBookmark = typeof bookmarks.$inferInsert;
-
-export const bookmarkRelations = relations(bookmarks, ({ one }) => ({
-  post: one(posts, {
-    fields: [bookmarks.postId],
-    references: [posts.id],
-  }),
-  accountOwner: one(accountOwners, {
-    fields: [bookmarks.accountOwnerId],
-    references: [accountOwners.id],
-  }),
-}));
-
-export const markerTypeEnum = pgEnum("marker_type", ["notifications", "home"]);
-
-export type MarkerType = (typeof markerTypeEnum.enumValues)[number];
-
-export const markers = pgTable(
-  "markers",
-  {
-    accountOwnerId: uuid("account_owner_id")
-      .$type<Uuid>()
-      .notNull()
-      .references(() => accountOwners.id, { onDelete: "cascade" }),
-    type: markerTypeEnum("type").notNull(),
-    lastReadId: text("last_read_id").notNull(),
-    version: bigint("version", { mode: "number" }).notNull().default(1),
-    updated: timestamp("updated", { withTimezone: true })
-      .notNull()
-      .default(currentTimestamp),
-  },
-  (table) => [primaryKey({ columns: [table.accountOwnerId, table.type] })],
-);
-
-export type Marker = typeof markers.$inferSelect;
-export type NewMarker = typeof markers.$inferInsert;
-
-export const markerRelations = relations(markers, ({ one }) => ({
-  accountOwner: one(accountOwners, {
-    fields: [markers.accountOwnerId],
-    references: [accountOwners.id],
-  }),
-}));
-
-export const featuredTags = pgTable(
-  "featured_tags",
-  {
-    id: uuid("id").$type<Uuid>().primaryKey(),
-    accountOwnerId: uuid("account_owner_id")
-      .$type<Uuid>()
-      .notNull()
-      .references(() => accountOwners.id, { onDelete: "cascade" }),
-    name: text("name").notNull(),
-    created: timestamp("created", { withTimezone: true }),
-  },
-  (table) => [unique().on(table.accountOwnerId, table.name)],
-);
-
-export type FeaturedTag = typeof featuredTags.$inferSelect;
-export type NewFeaturedTag = typeof featuredTags.$inferInsert;
-
-export const featuredTagRelations = relations(featuredTags, ({ one }) => ({
-  accountOwner: one(accountOwners, {
-    fields: [featuredTags.accountOwnerId],
-    references: [accountOwners.id],
-  }),
-}));
 
 export const listRepliesPolicyEnum = pgEnum("list_replies_policy", [
   "followed",
@@ -765,97 +576,6 @@ export const listMemberRelations = relations(listMembers, ({ one }) => ({
   }),
 }));
 
-export const mutes = pgTable(
-  "mutes",
-  {
-    id: uuid("id").$type<Uuid>().primaryKey(),
-    accountId: uuid("account_id")
-      .$type<Uuid>()
-      .notNull()
-      .references(() => accounts.id, { onDelete: "cascade" }),
-    mutedAccountId: uuid("muted_account_id")
-      .$type<Uuid>()
-      .notNull()
-      .references(() => accounts.id, { onDelete: "cascade" }),
-    notifications: boolean("notifications").notNull().default(true),
-    duration: interval("duration"),
-    created: timestamp("created", { withTimezone: true })
-      .notNull()
-      .default(currentTimestamp),
-  },
-  (table) => [
-    unique("mutes_account_id_muted_account_id_unique").on(
-      table.accountId,
-      table.mutedAccountId,
-    ),
-  ],
-);
-
-export type Mute = typeof mutes.$inferSelect;
-export type NewMute = typeof mutes.$inferInsert;
-
-export const muteRelations = relations(mutes, ({ one }) => ({
-  account: one(accounts, {
-    fields: [mutes.accountId],
-    references: [accounts.id],
-    relationName: "muter",
-  }),
-  targetAccount: one(accounts, {
-    fields: [mutes.mutedAccountId],
-    references: [accounts.id],
-    relationName: "muted",
-  }),
-}));
-
-
-export const customEmojis = pgTable("custom_emojis", {
-  shortcode: text("shortcode").primaryKey(),
-  url: text("url").notNull(),
-  category: text("category"),
-  created: timestamp("created", { withTimezone: true })
-    .notNull()
-    .default(currentTimestamp),
-});
-
-export type CustomEmoji = typeof customEmojis.$inferSelect;
-export type NewCustomEmoji = typeof customEmojis.$inferInsert;
-
-export const reports = pgTable("reports", {
-  id: uuid("id").$type<Uuid>().primaryKey(),
-  iri: text("iri").notNull().unique(),
-  accountId: uuid("account_id")
-    .$type<Uuid>()
-    .notNull()
-    .references(() => accounts.id, { onDelete: "cascade" }),
-  targetAccountId: uuid("target_account_id")
-    .$type<Uuid>()
-    .notNull()
-    .references(() => accounts.id, { onDelete: "cascade" }),
-  created: timestamp("created", { withTimezone: true })
-    .notNull()
-    .default(currentTimestamp),
-  comment: text("comment").notNull(),
-  // No relationship, we're just storing a set of Post IDs in here:
-  posts: uuid("posts")
-    .array()
-    .$type<Uuid[]>()
-    .notNull()
-    .default(sql`'{}'::uuid[]`),
-});
-
-export type Report = typeof reports.$inferSelect;
-export type NewReport = typeof reports.$inferInsert;
-
-export const reportRelations = relations(reports, ({ one }) => ({
-  account: one(accounts, {
-    fields: [reports.accountId],
-    references: [accounts.id],
-  }),
-  targetAccount: one(accounts, {
-    fields: [reports.targetAccountId],
-    references: [accounts.id],
-  }),
-}));
 
 export const timelinePosts = pgTable(
   "timeline_posts",

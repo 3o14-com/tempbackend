@@ -19,7 +19,6 @@ import {
   applications,
   scopeEnum,
 } from "./schema";
-import { renderCustomEmojis } from "./text";
 import { uuid } from "./uuid";
 
 export type Variables = {
@@ -191,10 +190,7 @@ function AuthorizationPage(props: AuthorizationPageProps) {
       <form action="/oauth/authorize" method="post">
         <p>Choose an account to authorize:</p>
         {props.accountOwners.map((accountOwner, i) => {
-          const accountName = renderCustomEmojis(
-            escape(accountOwner.account.name),
-            accountOwner.account.emojis,
-          );
+          const accountName = escape(accountOwner.account.name);
           return (
             <label>
               <input

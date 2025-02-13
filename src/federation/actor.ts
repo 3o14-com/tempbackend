@@ -1,7 +1,5 @@
 import {
-  Emoji,
   Endpoints,
-  Hashtag,
   Image,
   Like,
   PropertyValue,
@@ -17,12 +15,11 @@ import {
   accounts,
   follows,
   likes,
-  pinnedPosts,
   posts,
 } from "../schema";
 import { toTemporalInstant } from "./date";
 import { federation } from "./federation";
-import { toAnnounce, toCreate, toObject } from "./post";
+import { toAnnounce, toCreate } from "./post";
 
 federation
   .setActorDispatcher("/@{identifier}", async (ctx, identifier) => {
@@ -57,8 +54,6 @@ federation
       following: ctx.getFollowingUri(identifier),
       outbox: ctx.getOutboxUri(identifier),
       liked: ctx.getLikedUri(identifier),
-      featured: ctx.getFeaturedUri(identifier),
-      featuredTags: ctx.getFeaturedTagsUri(identifier),
       inbox: ctx.getInboxUri(identifier),
       endpoints: new Endpoints({
         sharedInbox: ctx.getInboxUri(),
@@ -71,14 +66,6 @@ federation
           new PropertyValue({
             name,
             value,
-          }),
-      ),
-      tags: Object.entries(account.emojis).map(
-        ([shortcode, url]) =>
-          new Emoji({
-            id: ctx.getObjectUri(Emoji, { shortcode }),
-            name: `:${shortcode.replace(/^:|:$/g, "")}:`,
-            icon: new Image({ url: new URL(url) }),
           }),
       ),
       discoverable: owner.discoverable,
@@ -306,55 +293,3 @@ federation
     if (result.length < 1) return 0;
     return result[0].cnt;
   });
-
-federation.setFeaturedDispatcher(
-  "/@{identifier}/pinned",
-  async (ctx, identifier) => {
-    const owner = await db.query.accountOwners.findFirst({
-      where: eq(accountOwners.handle, identifier),
-      with: { account: true },
-    });
-    if (owner == null) return null;
-    const items = await db.query.pinnedPosts.findMany({
-      where: eq(pinnedPosts.accountId, owner.id),
-      orderBy: desc(pinnedPosts.index),
-      with: {
-        post: {
-          with: {
-            account: { with: { owner: true } },
-            replyTarget: true,
-            quoteTarget: true,
-            media: true,
-            mentions: { with: { account: true } },
-            replies: true,
-          },
-        },
-      },
-    });
-    return {
-      items: items
-        .map((p) => p.post)
-        .filter((p) => p.visibility === "public" || p.visibility === "unlisted")
-        .map((p) => toObject(p, ctx)),
-    };
-  },
-);
-
-federation.setFeaturedTagsDispatcher(
-  "/@{identifier}/tags",
-  async (ctx, identifier) => {
-    const owner = await db.query.accountOwners.findFirst({
-      where: eq(accountOwners.handle, identifier),
-      with: { account: true, featuredTags: true },
-    });
-    if (owner == null) return null;
-    const items = owner.featuredTags.map(
-      (tag) =>
-        new Hashtag({
-          name: `#${tag.name}`,
-          href: new URL(`/tags/${tag.name}?handle=${owner.handle}`, ctx.url),
-        }),
-    );
-    return { items };
-  },
-);

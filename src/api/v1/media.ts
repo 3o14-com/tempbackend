@@ -4,13 +4,28 @@ import mime from "mime";
 import sharp from "sharp";
 import { db } from "../../db";
 import { serializeMedium } from "../../entities/medium";
-import { makeVideoScreenshot, uploadThumbnail } from "../../media";
+import { uploadThumbnail } from "../../media";
 import { type Variables, scopeRequired, tokenRequired } from "../../oauth";
 import { media } from "../../schema";
 import { disk, getAssetUrl } from "../../storage";
 import { isUuid, uuidv7 } from "../../uuid";
 
 const app = new Hono<{ Variables: Variables }>();
+
+interface MobileFile {
+  uri: string;
+  name?: string;
+  type?: string;
+}
+
+function isMobileFile(file: unknown): file is MobileFile {
+  return (
+    typeof file === "object" &&
+    file !== null &&
+    "uri" in file &&
+    typeof (file as any).uri === "string"
+  );
+}
 
 export async function postMedia(c: Context<{ Variables: Variables }>) {
   const owner = c.get("token").accountOwner;
@@ -26,15 +41,13 @@ export async function postMedia(c: Context<{ Variables: Variables }>) {
       return c.json({ error: "file is required" }, 422);
     }
 
-    // Handle the mobile upload format
     let fileData: File;
-    console.log(file);
-    if (typeof file === 'object' && 'uri' in file) {
-      // Convert the mobile format to File
+    if (isMobileFile(file)) {
+      // Convert the mobile upload format to a proper File instance.
       const response = await fetch(file.uri);
       const blob = await response.blob();
-      fileData = new File([blob], file.name || 'upload.jpg', {
-        type: file.type || 'image/jpeg'
+      fileData = new File([blob], file.name || "upload.jpg", {
+        type: file.type || "image/jpeg",
       });
     } else if (file instanceof File) {
       fileData = file;
@@ -46,21 +59,21 @@ export async function postMedia(c: Context<{ Variables: Variables }>) {
     const id = uuidv7();
     const imageData = new Uint8Array(await fileData.arrayBuffer());
 
-    // Get the file extension
-    const fileType = fileData.type || 'image/jpeg';
+    // Determine file type and extension.
+    const fileType = fileData.type || "image/jpeg";
     const extension = mime.getExtension(fileType);
     if (!extension) {
       return c.json({ error: "Unsupported media type" }, 400);
     }
 
-    // Process image
+    // Process the image.
     const image = sharp(imageData);
     const fileMetadata = await image.metadata();
 
     const sanitizedExt = extension.replace(/[/\\]/g, "");
     const path = `media/${id}/original.${sanitizedExt}`;
 
-    // Save file
+    // Save the file.
     try {
       await disk.put(path, imageData, {
         contentType: fileType,
@@ -74,7 +87,7 @@ export async function postMedia(c: Context<{ Variables: Variables }>) {
 
     const url = getAssetUrl(path, c.req.url);
 
-    // Save to database
+    // Save the media record to your database.
     try {
       const result = await db
         .insert(media)

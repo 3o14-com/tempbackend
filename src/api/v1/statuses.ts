@@ -1,11 +1,5 @@
 import {
-  Add,
-  Emoji,
-  EmojiReact,
-  Image,
   Note,
-  PUBLIC_COLLECTION,
-  Remove,
   Undo,
 } from "@fedify/fedify";
 import * as vocab from "@fedify/fedify/vocab";
@@ -14,14 +8,10 @@ import {
   and,
   eq,
   gt,
-  isNotNull,
   isNull,
-  notInArray,
-  or,
   sql,
 } from "drizzle-orm";
-import { type Context, Hono } from "hono";
-import type { TypedResponse } from "hono/types";
+import { Hono } from "hono";
 import { z } from "zod";
 import { db } from "../../db";
 import {
@@ -45,19 +35,12 @@ import { type PreviewCard, fetchPreviewCard } from "../../previewcard";
 import {
   type Like,
   type Mention,
-  type NewBookmark,
   type NewLike,
-  type NewPinnedPost,
   type NewPost,
-  bookmarks,
-  customEmojis,
   likes,
   media,
   mentions,
-  mutes,
-  pinnedPosts,
   posts,
-  reactions,
 } from "../../schema";
 import { formatPostContent } from "../../text";
 import { type Uuid, isUuid, uuid, uuidv7 } from "../../uuid";
@@ -132,7 +115,6 @@ app.post(
         : data.spoiler_text;
     const mentionedIds = content?.mentions ?? [];
     const hashtags = content?.hashtags ?? [];
-    const emojis = content?.emojis ?? {};
     const tags = Object.fromEntries(
       hashtags.map((tag) => [
         tag.toLowerCase(),
@@ -173,7 +155,6 @@ app.post(
           contentHtml: content?.html,
           language: data.language ?? owner.language,
           tags,
-          emojis,
           sensitive: data.sensitive,
           url: url.href,
           previewCard,
@@ -278,7 +259,6 @@ app.put(
           .href,
       ]),
     );
-    const emojis = content?.emojis ?? {};
     let previewCard: PreviewCard | null = null;
     if (content?.previewLink != null) {
       previewCard = await fetchPreviewCard(content.previewLink);
@@ -293,7 +273,6 @@ app.put(
           summary,
           language: data.language ?? owner.language,
           tags,
-          emojis,
           previewCard,
           updated: new Date(),
         })
@@ -436,27 +415,7 @@ app.get(
     let p: typeof post | undefined = post;
     while (p.replyTargetId != null) {
       p = await db.query.posts.findFirst({
-        where: and(
-          eq(posts.id, p.replyTargetId),
-          notInArray(
-            posts.accountId,
-            db
-              .select({ accountId: mutes.mutedAccountId })
-              .from(mutes)
-              .where(
-                and(
-                  eq(mutes.accountId, owner.id),
-                  or(
-                    isNull(mutes.duration),
-                    gt(
-                      sql`${mutes.created} + ${mutes.duration}`,
-                      sql`CURRENT_TIMESTAMP`,
-                    ),
-                  ),
-                ),
-              ),
-          ),
-        ),
+        where: eq(posts.id, p.replyTargetId),
         with: getPostRelations(owner.id),
       });
       if (p == null) break;
@@ -468,27 +427,7 @@ app.get(
       const p = ps.shift();
       if (p == null) break;
       const replies = await db.query.posts.findMany({
-        where: and(
-          eq(posts.replyTargetId, p.id),
-          notInArray(
-            posts.accountId,
-            db
-              .select({ accountId: mutes.mutedAccountId })
-              .from(mutes)
-              .where(
-                and(
-                  eq(mutes.accountId, owner.id),
-                  or(
-                    isNull(mutes.duration),
-                    gt(
-                      sql`${mutes.created} + ${mutes.duration}`,
-                      sql`CURRENT_TIMESTAMP`,
-                    ),
-                  ),
-                ),
-              ),
-          ),
-        ),
+        where: eq(posts.replyTargetId, p.id),
         with: getPostRelations(owner.id),
       });
       descendants.push(...replies);
@@ -838,408 +777,6 @@ app.get(
       ),
     );
   },
-);
-
-app.post(
-  "/:id/bookmark",
-  tokenRequired,
-  scopeRequired(["write:bookmarks"]),
-  async (c) => {
-    const owner = c.get("token").accountOwner;
-    if (owner == null) {
-      return c.json(
-        { error: "This method requires an authenticated user" },
-        422,
-      );
-    }
-    const postId = c.req.param("id");
-    if (!isUuid(postId)) return c.json({ error: "Record not found" }, 404);
-    try {
-      await db.insert(bookmarks).values({
-        postId,
-        accountOwnerId: owner.id,
-      } satisfies NewBookmark);
-    } catch (_) {
-      return c.json({ error: "Record not found" }, 404);
-    }
-    const post = await db.query.posts.findFirst({
-      where: eq(posts.id, postId),
-      with: getPostRelations(owner.id),
-    });
-    return c.json(serializePost(post!, owner, c.req.url));
-  },
-);
-
-app.post(
-  "/:id/unbookmark",
-  tokenRequired,
-  scopeRequired(["write:bookmarks"]),
-  async (c) => {
-    const owner = c.get("token").accountOwner;
-    if (owner == null) {
-      return c.json(
-        { error: "This method requires an authenticated user" },
-        422,
-      );
-    }
-    const postId = c.req.param("id");
-    if (!isUuid(postId)) return c.json({ error: "Record not found" }, 404);
-    const result = await db
-      .delete(bookmarks)
-      .where(
-        and(
-          eq(bookmarks.postId, postId),
-          eq(bookmarks.accountOwnerId, owner.id),
-        ),
-      )
-      .returning();
-    if (result.length < 1) {
-      return c.json({ error: "Record not found" }, 404);
-    }
-    const post = await db.query.posts.findFirst({
-      where: eq(posts.id, postId),
-      with: getPostRelations(owner.id),
-    });
-    return c.json(serializePost(post!, owner, c.req.url));
-  },
-);
-
-app.post(
-  "/:id/pin",
-  tokenRequired,
-  scopeRequired(["write:accounts"]),
-  async (c) => {
-    const owner = c.get("token").accountOwner;
-    if (owner == null) {
-      return c.json(
-        { error: "This method requires an authenticated user" },
-        422,
-      );
-    }
-    const postId = c.req.param("id");
-    if (!isUuid(postId)) return c.json({ error: "Record not found" }, 404);
-    const post = await db.query.posts.findFirst({
-      where: eq(posts.id, postId),
-    });
-    if (post == null) {
-      return c.json({ error: "Record not found" }, 404);
-    }
-    if (post.accountId !== owner.id) {
-      return c.json(
-        { error: "Validation failed: Someone else's post cannot be pinned" },
-        422,
-      );
-    }
-    const result = await db
-      .insert(pinnedPosts)
-      .values({
-        postId,
-        accountId: owner.id,
-      } satisfies NewPinnedPost)
-      .returning();
-    const fedCtx = federation.createContext(c.req.raw, undefined);
-    await fedCtx.sendActivity(
-      owner,
-      "followers",
-      new Add({
-        id: new URL(
-          `#add/${result[0].index}`,
-          fedCtx.getFeaturedUri(owner.handle),
-        ),
-        actor: new URL(owner.account.iri),
-        object: new URL(post.iri),
-        target: fedCtx.getFeaturedUri(owner.handle),
-      }),
-      {
-        preferSharedInbox: true,
-        excludeBaseUris: [new URL(c.req.url)],
-      },
-    );
-    const resultPost = await db.query.posts.findFirst({
-      where: eq(posts.id, postId),
-      with: getPostRelations(owner.id),
-    });
-    return c.json(serializePost(resultPost!, owner, c.req.url));
-  },
-);
-
-app.post(
-  "/:id/unpin",
-  tokenRequired,
-  scopeRequired(["write:accounts"]),
-  async (c) => {
-    const owner = c.get("token").accountOwner;
-    if (owner == null) {
-      return c.json(
-        { error: "This method requires an authenticated user" },
-        422,
-      );
-    }
-    const postId = c.req.param("id");
-    if (!isUuid(postId)) return c.json({ error: "Record not found" }, 404);
-    const result = await db
-      .delete(pinnedPosts)
-      .where(
-        and(
-          eq(pinnedPosts.postId, postId),
-          eq(pinnedPosts.accountId, owner.id),
-        ),
-      )
-      .returning();
-    if (result.length < 1) {
-      return c.json({ error: "Record not found" }, 404);
-    }
-    const post = await db.query.posts.findFirst({
-      where: eq(posts.id, postId),
-      with: getPostRelations(owner.id),
-    });
-    const fedCtx = federation.createContext(c.req.raw, undefined);
-    await fedCtx.sendActivity(
-      owner,
-      "followers",
-      new Remove({
-        id: new URL(
-          `#remove/${result[0].index}`,
-          fedCtx.getFeaturedUri(owner.handle),
-        ),
-        actor: new URL(owner.account.iri),
-        object: new URL(post!.iri),
-        target: fedCtx.getFeaturedUri(owner.handle),
-      }),
-      {
-        preferSharedInbox: true,
-        excludeBaseUris: [new URL(c.req.url)],
-      },
-    );
-    return c.json(serializePost(post!, owner, c.req.url));
-  },
-);
-
-async function addEmojiReaction(
-  c: Context<{ Variables: Variables }, "/:id/emoji_reactions/:emoji">,
-): Promise<Response | TypedResponse> {
-  const owner = c.get("token").accountOwner;
-  if (owner == null) {
-    return c.json({ error: "This method requires an authenticated user" }, 422);
-  }
-  const fedCtx = federation.createContext(c.req.raw, undefined);
-  const postId = c.req.param("id");
-  if (!isUuid(postId)) return c.json({ error: "Record not found" }, 404);
-  let emoji = c.req.param("emoji");
-  const url = new URL(c.req.url);
-  if (emoji.endsWith(`@${url.host}`)) emoji = emoji.replace(/@[^@]+$/, "");
-  let emojiCode = "";
-  let tag: Emoji | null = null;
-  if (emoji.includes("@")) {
-    // In case of using a remote custom emoji:
-    const [shortcode, domain] = emoji.split("@", 2);
-    const reactionList = await db.query.reactions.findMany({
-      with: { account: true },
-      where: and(
-        eq(reactions.postId, postId),
-        eq(reactions.emoji, `:${shortcode}:`),
-        isNotNull(reactions.customEmoji),
-        isNotNull(reactions.emojiIri),
-      ),
-    });
-    for (const reaction of reactionList) {
-      if (
-        reaction.customEmoji == null ||
-        reaction.emojiIri == null ||
-        !reaction.account.handle.endsWith(`@${domain}`)
-      ) {
-        continue;
-      }
-      await db.insert(reactions).values({
-        ...reaction,
-        accountId: owner.id,
-      });
-      emojiCode = reaction.emoji;
-      tag = new Emoji({
-        id: new URL(reaction.emojiIri),
-        name: emojiCode,
-        icon: new Image({
-          url: new URL(reaction.customEmoji),
-        }),
-      });
-      break;
-    }
-    if (emojiCode === "") return c.notFound();
-  } else {
-    const customEmoji = await db.query.customEmojis.findFirst({
-      where: eq(customEmojis.shortcode, emoji),
-    });
-    if (customEmoji == null) {
-      if (!/^[\p{Emoji}]+$/u.test(emoji)) return c.notFound();
-      // Unicode emoji:
-      await db.insert(reactions).values({
-        postId,
-        accountId: owner.id,
-        emoji,
-        customEmoji: null,
-      });
-      emojiCode = emoji;
-    } else {
-      // Local custom emoji:
-      emojiCode = `:${emoji}:`;
-      const emojiIri = fedCtx.getObjectUri(Emoji, { shortcode: emoji });
-      await db.insert(reactions).values({
-        postId,
-        accountId: owner.id,
-        emoji: emojiCode,
-        customEmoji: customEmoji.url,
-        emojiIri: emojiIri.href,
-      });
-      tag = new Emoji({
-        id: emojiIri,
-        name: emojiCode,
-        icon: new Image({
-          url: new URL(customEmoji.url),
-        }),
-      });
-    }
-  }
-  const post = await db.query.posts.findFirst({
-    where: eq(posts.id, postId),
-    with: getPostRelations(owner.id),
-  });
-  if (post == null) return c.notFound();
-  const activity = new EmojiReact({
-    id: new URL(`/#react/${owner.id}/${postId}/${emoji}`, url),
-    actor: fedCtx.getActorUri(owner.handle),
-    tos: [new URL(post.account.iri), fedCtx.getFollowersUri(owner.handle)],
-    cc: PUBLIC_COLLECTION,
-    object: new URL(post.iri),
-    content: emojiCode,
-    tags: tag == null ? [] : [tag],
-  });
-  await fedCtx.sendActivity({ username: owner.handle }, "followers", activity, {
-    preferSharedInbox: true,
-    excludeBaseUris: [new URL(c.req.url)],
-  });
-  await fedCtx.sendActivity(
-    { username: owner.handle },
-    {
-      id: new URL(post.account.iri),
-      inboxId: new URL(post.account.inboxUrl),
-      endpoints:
-        post.account.sharedInboxUrl == null
-          ? null
-          : {
-            sharedInbox: new URL(post.account.sharedInboxUrl),
-          },
-    },
-    activity,
-    { preferSharedInbox: true, excludeBaseUris: [new URL(c.req.url)] },
-  );
-  return c.json(serializePost(post, owner, c.req.url));
-}
-
-app.put(
-  "/:id/emoji_reactions/:emoji",
-  tokenRequired,
-  scopeRequired(["write:favourites"]),
-  addEmojiReaction,
-);
-
-app.post(
-  "/:id/react/:emoji",
-  tokenRequired,
-  scopeRequired(["write:favourites"]),
-  addEmojiReaction,
-);
-
-async function removeEmojiReaction(
-  c: Context<{ Variables: Variables }, "/:id/emoji_reactions/:emoji">,
-): Promise<Response | TypedResponse> {
-  const owner = c.get("token").accountOwner;
-  if (owner == null) {
-    return c.json({ error: "This method requires an authenticated user" }, 422);
-  }
-  const fedCtx = federation.createContext(c.req.raw, undefined);
-  const postId = c.req.param("id");
-  if (!isUuid(postId)) return c.json({ error: "Record not found" }, 404);
-  let emoji = c.req.param("emoji");
-  const url = new URL(c.req.url);
-  if (emoji.endsWith(`@${url.host}`)) emoji = emoji.replace(/@[^@]+$/, "");
-  const unicode = /^[\p{Emoji}]+$/u.test(emoji);
-  const deleted = await db
-    .delete(reactions)
-    .where(
-      and(
-        eq(reactions.postId, postId),
-        eq(reactions.accountId, owner.id),
-        eq(reactions.emoji, unicode ? emoji : `:${emoji}:`),
-      ),
-    )
-    .returning();
-  if (deleted.length < 1) return c.notFound();
-  const [reaction] = deleted;
-  const post = await db.query.posts.findFirst({
-    where: eq(posts.id, postId),
-    with: getPostRelations(owner.id),
-  });
-  if (post == null) return c.notFound();
-  const activity = new Undo({
-    id: new URL(`/#react/undo/${owner.id}/${postId}/${emoji}`, url),
-    actor: fedCtx.getActorUri(owner.handle),
-    tos: [new URL(post.account.iri), fedCtx.getFollowersUri(owner.handle)],
-    cc: PUBLIC_COLLECTION,
-    object: new EmojiReact({
-      id: new URL(`/#react/${owner.id}/${postId}/${emoji}`, url),
-      actor: fedCtx.getActorUri(owner.handle),
-      tos: [new URL(post.account.iri), fedCtx.getFollowersUri(owner.handle)],
-      cc: PUBLIC_COLLECTION,
-      object: new URL(post.iri),
-      content: reaction.emoji,
-      tags:
-        reaction.emojiIri == null || reaction.customEmoji == null
-          ? []
-          : [
-            new Emoji({
-              id: new URL(reaction.emojiIri),
-              name: reaction.emoji,
-              icon: new Image({
-                url: new URL(reaction.customEmoji),
-              }),
-            }),
-          ],
-    }),
-  });
-  await fedCtx.sendActivity({ username: owner.handle }, "followers", activity, {
-    preferSharedInbox: true,
-    excludeBaseUris: [new URL(c.req.url)],
-  });
-  await fedCtx.sendActivity(
-    { username: owner.handle },
-    {
-      id: new URL(post.account.iri),
-      inboxId: new URL(post.account.inboxUrl),
-      endpoints:
-        post.account.sharedInboxUrl == null
-          ? null
-          : {
-            sharedInbox: new URL(post.account.sharedInboxUrl),
-          },
-    },
-    activity,
-    { preferSharedInbox: true, excludeBaseUris: [new URL(c.req.url)] },
-  );
-  return c.json(serializePost(post, owner, c.req.url));
-}
-
-app.delete(
-  "/:id/emoji_reactions/:emoji",
-  tokenRequired,
-  scopeRequired(["write:favourites"]),
-  removeEmojiReaction,
-);
-
-app.post(
-  "/:id/unreact/:emoji",
-  tokenRequired,
-  scopeRequired(["write:favourites"]),
-  removeEmojiReaction,
 );
 
 export default app;

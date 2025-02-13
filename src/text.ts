@@ -23,7 +23,6 @@ export interface FormatResult {
   html: string;
   mentions: Uuid[];
   hashtags: string[];
-  emojis: Record<string, string>;
   previewLink: string | null;
   quoteTarget: ASPost | null;
 }
@@ -86,16 +85,6 @@ export async function formatText(
       id: account.id,
     };
   }
-
-  // Collect custom emojis:
-  const emojis: string[] = [];
-  for (const m of text.matchAll(CUSTOM_EMOJI_REGEXP)) emojis.push(m[1]);
-  const customEmojis =
-    emojis.length > 0
-      ? await db.query.customEmojis.findMany({
-        where: inArray(schema.customEmojis.shortcode, emojis),
-      })
-      : [];
 
   // Render the final HTML:
   const md = new MarkdownIt({ linkify: true, html: ALLOW_HTML })
@@ -168,9 +157,6 @@ export async function formatText(
     hashtags: env.hashtags,
     previewLink: env.previewLink,
     quoteTarget,
-    emojis: Object.fromEntries(
-      customEmojis.map((emoji) => [`:${emoji.shortcode}:`, emoji.url]),
-    ),
   };
 }
 
@@ -220,26 +206,6 @@ export function renderCustomEmojis(
   }
 }
 
-export async function extractCustomEmojis(
-  db: PgDatabase<
-    PostgresJsQueryResultHKT,
-    typeof schema,
-    ExtractTablesWithRelations<typeof schema>
-  >,
-  text: string,
-): Promise<Record<string, string>> {
-  const emojis = new Set<string>();
-  for (const m of text.matchAll(CUSTOM_EMOJI_REGEXP)) emojis.add(m[1]);
-  const customEmojis =
-    emojis.size > 0
-      ? await db.query.customEmojis.findMany({
-        where: inArray(schema.customEmojis.shortcode, [...emojis]),
-      })
-      : [];
-  return Object.fromEntries(
-    customEmojis.map((emoji) => [`:${emoji.shortcode}:`, emoji.url]),
-  );
-}
 
 export function extractPreviewLink(html: string): string | null {
   const $ = cheerio.load(html);
