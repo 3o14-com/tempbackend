@@ -90,11 +90,6 @@ app.get("/", async (c) => {
     },
     rules: [],
     feature_quote: true,
-    fedibird_capabilities: [
-      "emoji_reaction",
-      "enable_wide_emoji",
-      "enable_wide_emoji_reaction",
-    ],
   });
 });
 
