@@ -4,7 +4,6 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { db } from "../../db";
 import { getPostRelations, serializePost } from "../../entities/status";
-import { serializeTag } from "../../entities/tag";
 import { type Variables, scopeRequired, tokenRequired } from "../../oauth";
 import {
   likes,
@@ -105,24 +104,6 @@ app.get(
   },
 );
 
-
-app.get(
-  "/followed_tags",
-  tokenRequired,
-  scopeRequired(["read:follows"]),
-  (c) => {
-    const owner = c.get("token").accountOwner;
-    if (owner == null) {
-      return c.json(
-        { error: "This method requires an authenticated user" },
-        422,
-      );
-    }
-    return c.json(
-      owner.followedTags.map((tag) => serializeTag(tag, owner, c.req.url)),
-    );
-  },
-);
 
 
 export default app;
