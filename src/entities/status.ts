@@ -154,7 +154,7 @@ export function serializePost(
     reblogged: post.shares.some(
       (share) => share.accountId === currentAccountOwner.id,
     ),
-    content: post.contentHtml ?? "",
+    content: post.content ?? "",
     reblog:
       post.sharing == null
         ? null
